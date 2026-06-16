@@ -21,7 +21,7 @@ import (
 )
 
 func main() {
-	systemCfg, err := configloader.LoadSystemConfig(resolveSystemConfigPath())
+	systemCfg, err := configloader.LoadSystemConfig("./config/system.yaml")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -59,14 +59,6 @@ func main() {
 	}, "./static_resources")
 
 	log.Fatal(router.Run((fmt.Sprintf(":%d", systemCfg.HTTPPort))))
-}
-
-func resolveSystemConfigPath() string {
-	localPath := "./config/system.local.yaml"
-	if _, err := os.Stat(localPath); err == nil {
-		return localPath
-	}
-	return "./config/system.yaml"
 }
 
 func mustEnsureDirs(cfg *configloader.SystemConfig) {

@@ -18,7 +18,7 @@ go-backend/publish_records/
 go-backend/bin/hugo-extended
 go-backend/bin/hugo-extended*
 !/go-backend/bin/.gitkeep
-go-backend/config/system.local.yaml
+go-backend/config/system.yaml
 go-backend/global_theme/hextra/.git/
 *.hugo_build.lock
 
