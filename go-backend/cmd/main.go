@@ -21,7 +21,7 @@ import (
 )
 
 func main() {
-	systemCfg, err := configloader.LoadSystemConfig("./config/system.yaml")
+	systemCfg, err := configloader.LoadSystemConfig(resolveSystemConfigPath())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func main() {
 	auth.StartCleanup()
 	go cleanTemp(systemCfg.BuildTempRoot, time.Duration(systemCfg.TempCleanInterval)*time.Hour)
 
-	hugoSvc := hugobuilder.New(systemCfg)
+	hugoSvc := hugobuilder.New(systemCfg, siteCfg)
 	if err := hugoSvc.CheckBinary(); err != nil {
 		log.Fatal(err)
 	}
@@ -59,6 +59,14 @@ func main() {
 	}, "./static_resources")
 
 	log.Fatal(router.Run((fmt.Sprintf(":%d", systemCfg.HTTPPort))))
+}
+
+func resolveSystemConfigPath() string {
+	localPath := "./config/system.local.yaml"
+	if _, err := os.Stat(localPath); err == nil {
+		return localPath
+	}
+	return "./config/system.yaml"
 }
 
 func mustEnsureDirs(cfg *configloader.SystemConfig) {

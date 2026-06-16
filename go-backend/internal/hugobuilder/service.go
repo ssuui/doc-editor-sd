@@ -15,11 +15,12 @@ import (
 )
 
 type Service struct {
-	cfg *configloader.SystemConfig
+	cfg     *configloader.SystemConfig
+	siteCfg *configloader.SiteGlobalConfig
 }
 
-func New(cfg *configloader.SystemConfig) *Service {
-	return &Service{cfg: cfg}
+func New(cfg *configloader.SystemConfig, siteCfg *configloader.SiteGlobalConfig) *Service {
+	return &Service{cfg: cfg, siteCfg: siteCfg}
 }
 
 func (s *Service) CheckBinary() error {
@@ -35,6 +36,9 @@ func (s *Service) CheckBinary() error {
 
 func (s *Service) BuildMainSite(sourceRoot string) (string, error) {
 	out := filepath.Join(s.cfg.BuildTempRoot, "main_site_out")
+	if err := os.RemoveAll(out); err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(out, 0o755); err != nil {
 		return "", err
 	}
@@ -71,31 +75,82 @@ func (s *Service) BuildMainSite(sourceRoot string) (string, error) {
 			return "", err
 		}
 	}
-	configRaw := []byte("baseURL = \"/\"\nlanguageCode = \"zh-cn\"\ntitle = \"文档门户\"\n")
+	if err := s.prepareMarkdownTree(contentDir, markdownPrepOptions{
+		RootTitle:    s.siteCfg.SiteTitle,
+		RootHasCards: true,
+	}); err != nil {
+		return "", err
+	}
+	configRaw := []byte(s.buildMainSiteConfig())
 	if err := os.WriteFile(filepath.Join(buildSource, "hugo.toml"), configRaw, 0o644); err != nil {
 		return "", err
 	}
+	absBuildSource, err := filepath.Abs(buildSource)
+	if err != nil {
+		return "", err
+	}
+	absThemeDir, err := filepath.Abs(s.cfg.GlobalThemePath)
+	if err != nil {
+		return "", err
+	}
+	absOut, err := filepath.Abs(out)
+	if err != nil {
+		return "", err
+	}
 	return s.runCommand([]string{
-		"--source=" + buildSource,
-		"--themesDir=" + s.cfg.GlobalThemePath,
+		"--source=" + absBuildSource,
+		"--themesDir=" + absThemeDir,
 		"--theme=main-site-template",
-		"--destination=" + out,
-		"--timeout=" + fmt.Sprintf("%ds", s.cfg.BuildTaskTimeout),
+		"--destination=" + absOut,
 	})
 }
 
 func (s *Service) BuildBook(sourceRoot string, bookDir string) (string, error) {
 	bookSource := filepath.Join(sourceRoot, bookDir)
+	buildSource := filepath.Join(s.cfg.BuildTempRoot, "book_site_src", bookDir)
 	out := filepath.Join(s.cfg.BuildTempRoot, "book_cache", bookDir)
+	if err := os.RemoveAll(buildSource); err != nil {
+		return "", err
+	}
+	if err := os.RemoveAll(out); err != nil {
+		return "", err
+	}
+	if err := copyDir(bookSource, buildSource); err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(out, 0o755); err != nil {
 		return "", err
 	}
+	bookMeta, err := configloader.LoadBookMeta(filepath.Join(buildSource, "book_meta.yaml"))
+	if err != nil {
+		return "", err
+	}
+	if err := s.prepareMarkdownTree(filepath.Join(buildSource, "content"), markdownPrepOptions{
+		RootTitle:       bookMeta.DisplayName,
+		RootCascadeDocs: true,
+	}); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(buildSource, "hugo.toml"), []byte(s.buildBookConfig(bookDir, bookMeta)), 0o644); err != nil {
+		return "", err
+	}
+	absBookSource, err := filepath.Abs(buildSource)
+	if err != nil {
+		return "", err
+	}
+	absThemeDir, err := filepath.Abs(s.cfg.GlobalThemePath)
+	if err != nil {
+		return "", err
+	}
+	absOut, err := filepath.Abs(out)
+	if err != nil {
+		return "", err
+	}
 	return s.runCommand([]string{
-		"--source=" + bookSource,
-		"--themesDir=" + s.cfg.GlobalThemePath,
+		"--source=" + absBookSource,
+		"--themesDir=" + absThemeDir,
 		"--theme=book-site-template",
-		"--destination=" + out,
-		"--timeout=" + fmt.Sprintf("%ds", s.cfg.BuildTaskTimeout),
+		"--destination=" + absOut,
 	})
 }
 
@@ -171,12 +226,19 @@ func (s *Service) generatePortalIndex(sourceRoot string) (string, error) {
 		return siteMeta.BookList[i].Weight < siteMeta.BookList[j].Weight
 	})
 	lines := []string{
-		"# 企业文档门户",
+		"# " + s.siteCfg.SiteTitle,
 		"",
-		"以下内容由系统根据书籍元数据自动生成。",
+		s.siteCfg.FooterText,
 		"",
-		"## 书籍导航",
+		"{{< callout type=\"info\" >}}",
+		"文档门户已切换为 Hextra 主题，支持全文搜索、暗色模式和更清晰的目录导航。",
+		"{{< /callout >}}",
 		"",
+		"<div id=\"book-list\"></div>",
+		"",
+		"## 文档总览",
+		"",
+		"{{< cards cols=\"2\" >}}",
 	}
 	for _, item := range siteMeta.BookList {
 		if !item.EnableHomeShow {
@@ -186,16 +248,260 @@ func (s *Service) generatePortalIndex(sourceRoot string) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		subtitle := meta.Description
+		tag := meta.Version
+		if tag == "" {
+			tag = item.BookDirName
+		}
+		if len(meta.Tags) > 0 {
+			subtitle = subtitle + "  标签：" + strings.Join(meta.Tags, " / ")
+		}
 		lines = append(lines,
-			fmt.Sprintf("### [%s](/%s/)", meta.DisplayName, item.BookDirName),
-			"",
-			meta.Description,
-			"",
-			fmt.Sprintf("- 目录：`%s`", item.BookDirName),
-			fmt.Sprintf("- 版本：`%s`", meta.Version),
-			fmt.Sprintf("- 标签：%s", strings.Join(meta.Tags, " / ")),
-			"",
+			fmt.Sprintf("{{< card link=\"/%s/\" title=\"%s\" subtitle=\"%s\" icon=\"book-open\" tag=\"%s\" >}}", item.BookDirName, escapeFrontMatterString(meta.DisplayName), escapeFrontMatterString(subtitle), escapeFrontMatterString(tag)),
 		)
 	}
+	lines = append(lines,
+		"{{< /cards >}}",
+	)
 	return strings.Join(lines, "\n"), nil
+}
+
+type markdownPrepOptions struct {
+	RootTitle       string
+	RootCascadeDocs bool
+	RootHasCards    bool
+}
+
+func (s *Service) prepareMarkdownTree(contentDir string, opts markdownPrepOptions) error {
+	return filepath.Walk(contentDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() || filepath.Ext(path) != ".md" {
+			return nil
+		}
+		rel, relErr := filepath.Rel(contentDir, path)
+		if relErr != nil {
+			return relErr
+		}
+		raw, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		updated := normalizeMarkdown(raw, rel, opts)
+		return os.WriteFile(path, updated, 0o644)
+	})
+}
+
+func normalizeMarkdown(raw []byte, rel string, opts markdownPrepOptions) []byte {
+	text := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	if hasFrontMatter(text) {
+		return []byte(text)
+	}
+	title, body := extractLeadingH1(text)
+	if rel == "_index.md" && opts.RootTitle != "" {
+		title = opts.RootTitle
+	}
+	if title == "" {
+		title = fallbackTitleFromPath(rel)
+	}
+	frontMatter := make([]string, 0, 8)
+	frontMatter = append(frontMatter, "---")
+	frontMatter = append(frontMatter, fmt.Sprintf("title: \"%s\"", escapeFrontMatterString(title)))
+	if rel == "_index.md" && opts.RootCascadeDocs {
+		frontMatter = append(frontMatter, "cascade:")
+		frontMatter = append(frontMatter, "  type: docs")
+	}
+	frontMatter = append(frontMatter, "---", "")
+	body = strings.TrimLeft(body, "\n")
+	if rel == "_index.md" && opts.RootHasCards {
+		body = strings.TrimLeft(body, "\n")
+	}
+	if body != "" {
+		return []byte(strings.Join(frontMatter, "\n") + body + ensureTrailingNewline(body))
+	}
+	return []byte(strings.Join(frontMatter, "\n"))
+}
+
+func extractLeadingH1(text string) (string, string) {
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "# ") {
+			title := strings.TrimSpace(strings.TrimPrefix(trimmed, "# "))
+			body := strings.Join(lines[i+1:], "\n")
+			return title, body
+		}
+		break
+	}
+	return "", text
+}
+
+func hasFrontMatter(text string) bool {
+	return strings.HasPrefix(text, "---\n") || strings.HasPrefix(text, "+++\n")
+}
+
+func fallbackTitleFromPath(rel string) string {
+	base := strings.TrimSuffix(filepath.Base(rel), filepath.Ext(rel))
+	if base == "_index" {
+		base = filepath.Base(filepath.Dir(rel))
+	}
+	base = strings.TrimLeft(base, "0123456789-_ ")
+	if base == "" {
+		return "未命名页面"
+	}
+	return base
+}
+
+func ensureTrailingNewline(body string) string {
+	if strings.HasSuffix(body, "\n") {
+		return ""
+	}
+	return "\n"
+}
+
+func escapeFrontMatterString(value string) string {
+	value = strings.ReplaceAll(value, `\`, `\\`)
+	value = strings.ReplaceAll(value, `"`, `\"`)
+	return value
+}
+
+func (s *Service) buildMainSiteConfig() string {
+	nav := make([]string, 0, len(s.siteCfg.GlobalNav)+1)
+	for idx, item := range s.siteCfg.GlobalNav {
+		nav = append(nav, strings.Join([]string{
+			"[[menu.main]]",
+			fmt.Sprintf("name = %q", item.Name),
+			fmt.Sprintf("url = %q", item.Link),
+			fmt.Sprintf("weight = %d", idx+1),
+			"",
+		}, "\n"))
+	}
+	nav = append(nav, strings.Join([]string{
+		"[[menu.main]]",
+		`name = "搜索"`,
+		fmt.Sprintf("weight = %d", len(s.siteCfg.GlobalNav)+1),
+		"[menu.main.params]",
+		`type = "search"`,
+		"",
+	}, "\n"))
+	return strings.TrimSpace(fmt.Sprintf(`
+baseURL = "/"
+title = %q
+defaultContentLanguage = "zh-cn"
+hasCJKLanguage = true
+enableRobotsTXT = true
+enableInlineShortcodes = true
+disableKinds = ["taxonomy", "term"]
+
+[markup.highlight]
+noClasses = false
+
+[markup.goldmark.renderer]
+unsafe = true
+
+[params]
+description = %q
+
+[params.navbar]
+displayTitle = true
+displayLogo = true
+width = "wide"
+
+[params.navbar.logo]
+path = "global_static/logo.svg"
+link = "/"
+
+[params.footer]
+enable = true
+displayCopyright = true
+displayPoweredBy = false
+width = "wide"
+
+[params.theme]
+default = "system"
+displayToggle = true
+
+[params.search]
+enable = true
+type = "flexsearch"
+
+[params.page]
+width = "wide"
+
+%s`, s.siteCfg.SiteTitle, s.siteCfg.FooterText, strings.Join(nav, "\n")))
+}
+
+func (s *Service) buildBookConfig(bookDir string, meta *configloader.BookMeta) string {
+	menuBlocks := []string{
+		strings.Join([]string{
+			"[[menu.main]]",
+			`name = "搜索"`,
+			"weight = 99",
+			"[menu.main.params]",
+			`type = "search"`,
+			"",
+		}, "\n"),
+	}
+	for idx, item := range meta.ExtraNavLinks {
+		menuBlocks = append(menuBlocks, strings.Join([]string{
+			"[[menu.main]]",
+			fmt.Sprintf("name = %q", item.Name),
+			fmt.Sprintf("url = %q", item.URL),
+			fmt.Sprintf("weight = %d", idx+10),
+			"",
+		}, "\n"))
+	}
+	description := meta.Description
+	if len(meta.Tags) > 0 {
+		description = strings.TrimSpace(description + " 标签：" + strings.Join(meta.Tags, " / "))
+	}
+	return strings.TrimSpace(fmt.Sprintf(`
+baseURL = %q
+title = %q
+defaultContentLanguage = "zh-cn"
+hasCJKLanguage = true
+enableRobotsTXT = true
+enableInlineShortcodes = true
+disableKinds = ["taxonomy", "term"]
+
+[markup.highlight]
+noClasses = false
+
+[markup.goldmark.renderer]
+unsafe = true
+
+[params]
+description = %q
+
+[params.navbar]
+displayTitle = true
+displayLogo = false
+width = "wide"
+
+[params.footer]
+enable = true
+displayCopyright = true
+displayPoweredBy = false
+width = "wide"
+
+[params.theme]
+default = "system"
+displayToggle = true
+
+[params.search]
+enable = true
+type = "flexsearch"
+
+[params.page]
+width = "normal"
+
+[params.toc]
+displayTags = false
+
+%s
+`, "/"+bookDir+"/", meta.DisplayName, description, strings.Join(menuBlocks, "\n")))
 }

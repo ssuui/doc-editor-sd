@@ -1,7 +1,0 @@
-display_name: "运维规范"
-cover_img: "https://assets.atlaslab.example/book-res/book_02_运维规范/static-img/cover.png"
-description: "部署、告警、应急处理规范"
-tags: ["运维", "部署"]
-version: "v1.0.0"
-visible_in_home: true
-extra_nav_links: []

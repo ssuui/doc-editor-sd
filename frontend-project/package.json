@@ -3,12 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "mkdir -p dist/assets && ./node_modules/.bin/esbuild src/main.tsx --bundle --minify --sourcemap --outfile=dist/assets/app.js --loader:.ts=ts --loader:.tsx=tsx --loader:.css=css && cp public/index.html dist/index.html && cp public/login.html dist/login.html && cp src/styles.css dist/styles.css"
+    "build": "rm -rf dist && mkdir -p dist/assets && ./node_modules/.bin/esbuild src/main.tsx --bundle --minify --sourcemap --outfile=dist/assets/app.js --loader:.ts=ts --loader:.tsx=tsx --loader:.css=css --loader:.ttf=file && cp public/index.html dist/index.html && cp public/login.html dist/login.html"
   },
   "dependencies": {
-    "marked": "^4.3.0",
+    "@dtinsight/molecule": "^1.3.6",
+    "marked": "^18.0.5",
+    "monaco-editor": "^0.31.1",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "reflect-metadata": "^0.1.13",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.2.0"
   },
   "devDependencies": {
     "esbuild": "^0.21.5",

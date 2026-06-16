@@ -33,16 +33,33 @@ func (s *Service) List() ([]configloader.PublishRecord, error) {
 		return nil, err
 	}
 	records := make([]configloader.PublishRecord, 0, len(entries))
+	seen := map[string]struct{}{}
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
 			continue
 		}
 		record := configloader.PublishRecord{}
 		if err := loadRecord(filepath.Join(s.dir, entry.Name()), &record); err == nil {
+			record.RecordID = strings.TrimSpace(record.RecordID)
+			record.PublishingTime = strings.TrimSpace(record.PublishingTime)
+			record.PublishingType = strings.TrimSpace(record.PublishingType)
+			record.Status = strings.TrimSpace(record.Status)
+			if record.RecordID == "" {
+				continue
+			}
+			if _, exists := seen[record.RecordID]; exists {
+				continue
+			}
+			seen[record.RecordID] = struct{}{}
 			records = append(records, record)
 		}
 	}
-	sort.Slice(records, func(i, j int) bool { return records[i].PublishingTime > records[j].PublishingTime })
+	sort.Slice(records, func(i, j int) bool {
+		if records[i].PublishingTime == records[j].PublishingTime {
+			return records[i].RecordID > records[j].RecordID
+		}
+		return records[i].PublishingTime > records[j].PublishingTime
+	})
 	return records, nil
 }
 

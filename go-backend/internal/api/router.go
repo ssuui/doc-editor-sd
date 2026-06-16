@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -56,6 +57,10 @@ func Register(r *gin.Engine, svc Services, staticDir string) {
 			books, err := fsmanager.ListBooks(filepath.Join(svc.SourceDir, "_site_meta.yaml"))
 			respondFileResult(c, books, err)
 		})
+		fsGroup.POST("/site/rebuild-meta", func(c *gin.Context) {
+			books, err := svc.FS.RebuildSiteMeta()
+			respondFileResult(c, books, err)
+		})
 		fsGroup.GET("/book/tree", func(c *gin.Context) {
 			tree, err := svc.FS.BookTree(c.Query("bookDirName"))
 			respondFileResult(c, tree, err)
@@ -63,6 +68,14 @@ func Register(r *gin.Engine, svc Services, staticDir string) {
 		fsGroup.GET("/file/content", func(c *gin.Context) {
 			content, err := svc.FS.ReadFile(c.Query("path"))
 			respondFileResult(c, gin.H{"content": content}, err)
+		})
+		fsGroup.GET("/file/raw", func(c *gin.Context) {
+			abs, err := svc.FS.ResolvePath(c.Query("path"))
+			if err != nil {
+				respondFileResult(c, nil, err)
+				return
+			}
+			c.File(abs)
 		})
 		fsGroup.PUT("/file/save", func(c *gin.Context) {
 			var req struct {
@@ -75,17 +88,46 @@ func Register(r *gin.Engine, svc Services, staticDir string) {
 			}
 			respondFileOnly(c, svc.FS.SaveFile(req.Path, req.Content))
 		})
-		fsGroup.POST("/file/new", func(c *gin.Context) {
-			var req struct {
-				Type string `json:"type"`
-				Path string `json:"path"`
-			}
-			if c.ShouldBindJSON(&req) != nil {
-				Fail(c, 9999, "请求参数错误")
-				return
-			}
-			respondFileOnly(c, svc.FS.NewPath(req.Type, req.Path))
-		})
+			fsGroup.POST("/file/new", func(c *gin.Context) {
+				var req struct {
+					Type string `json:"type"`
+					Path string `json:"path"`
+				}
+				if c.ShouldBindJSON(&req) != nil {
+					Fail(c, 9999, "请求参数错误")
+					return
+				}
+				respondFileOnly(c, svc.FS.NewPath(req.Type, req.Path))
+			})
+			fsGroup.POST("/file/upload", func(c *gin.Context) {
+				targetDir := c.PostForm("target_dir")
+				if targetDir == "" || strings.Contains(targetDir, "..") {
+					Fail(c, 2003, "非法路径")
+					return
+				}
+				file, header, err := c.Request.FormFile("file")
+				if err != nil {
+					Fail(c, 9999, "未找到上传文件")
+					return
+				}
+				defer file.Close()
+				maxBytes := int64(svc.System.EditorLimit.MaxFileMB) * 1024 * 1024
+				data, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
+				if err != nil {
+					Fail(c, 9999, "读取上传文件失败")
+					return
+				}
+				if int64(len(data)) > maxBytes {
+					Fail(c, 9999, fmt.Sprintf("文件大小超过 %dMB", svc.System.EditorLimit.MaxFileMB))
+					return
+				}
+				finalPath, err := svc.FS.UploadFile(targetDir, header.Filename, data)
+				if err != nil {
+					Fail(c, 2002, err.Error())
+					return
+				}
+				respondFileResult(c, gin.H{"path": finalPath}, nil)
+			})
 		fsGroup.DELETE("/file/remove", func(c *gin.Context) {
 			var req struct {
 				Path string `json:"path"`
@@ -96,6 +138,17 @@ func Register(r *gin.Engine, svc Services, staticDir string) {
 			}
 			respondFileOnly(c, svc.FS.RemovePath(req.Path))
 		})
+		fsGroup.POST("/file/copy", func(c *gin.Context) {
+			var req struct {
+				Path string `json:"path"`
+			}
+			if c.ShouldBindJSON(&req) != nil {
+				Fail(c, 9999, "请求参数错误")
+				return
+			}
+			path, err := svc.FS.CopyPath(req.Path)
+			respondFileResult(c, gin.H{"path": path}, err)
+		})
 		fsGroup.PATCH("/file/rename", func(c *gin.Context) {
 			var req struct {
 				Path    string `json:"path"`
@@ -105,7 +158,8 @@ func Register(r *gin.Engine, svc Services, staticDir string) {
 				Fail(c, 9999, "请求参数错误")
 				return
 			}
-			respondFileOnly(c, svc.FS.RenamePath(req.Path, req.NewName))
+			path, err := svc.FS.RenamePath(req.Path, req.NewName)
+			respondFileResult(c, gin.H{"path": path}, err)
 		})
 		fsGroup.GET("/get-s3-upload-params", func(c *gin.Context) {
 			bookDir := c.Query("bookDirName")
@@ -114,12 +168,17 @@ func Register(r *gin.Engine, svc Services, staticDir string) {
 				Fail(c, 2003, "非法路径")
 				return
 			}
-			putURL, cdnURL, err := svc.Uploader.PresignImageUpload(bookDir, ext)
+			putURL, cdnURL, contentType, acl, err := svc.Uploader.PresignImageUpload(bookDir, ext)
 			if err != nil {
 				Fail(c, 4001, err.Error())
 				return
 			}
-			Success(c, gin.H{"put_url": putURL, "cdn_img_url": cdnURL})
+			Success(c, gin.H{
+				"put_url":      putURL,
+				"cdn_img_url":  cdnURL,
+				"content_type": contentType,
+				"acl":          acl,
+			})
 		})
 	}
 
@@ -197,7 +256,9 @@ func Register(r *gin.Engine, svc Services, staticDir string) {
 
 	r.GET("/", auth.RootHandler(staticDir))
 	r.GET("/login.html", func(c *gin.Context) { c.File(filepath.Join(staticDir, "login.html")) })
-	r.StaticFS("/", http.Dir(staticDir))
+	r.GET("/index.html", func(c *gin.Context) { c.File(filepath.Join(staticDir, "index.html")) })
+	r.GET("/styles.css", func(c *gin.Context) { c.File(filepath.Join(staticDir, "styles.css")) })
+	r.Static("/assets", filepath.Join(staticDir, "assets"))
 }
 
 func loginHandler(cfg *configloader.SystemConfig) gin.HandlerFunc {
@@ -234,6 +295,15 @@ func startPublish(c *gin.Context, svc Services, mode string, chosen []string) {
 				books = append(books, item.BookDirName)
 			}
 		}
+	}
+	books = normalizePublishBooks(books)
+	if mode == "single" && len(books) != 1 {
+		Fail(c, 9999, "请选择一个有效的书籍目录后再发布")
+		return
+	}
+	if len(books) == 0 {
+		Fail(c, 9999, "当前没有可发布的书籍")
+		return
 	}
 	task := svc.Tasks.Create(mode, books)
 	go runPublishTask(task.ID, svc, mode, books)
@@ -303,7 +373,7 @@ func saveRecord(svc Services, mode string, books []string, logs string, status s
 	record := &configloader.PublishRecord{
 		PublishingTime: time.Now().Format("2006-01-02 15:04:05"),
 		PublishingType: mode,
-		BuildBooks:     books,
+		BuildBooks:     normalizePublishBooks(books),
 		TempOutputPath: filepath.Join(svc.System.BuildTempRoot, "full_package"),
 		S3Bucket:       svc.System.S3.DefaultBucketName,
 		S3Prefix:       "/",
@@ -318,6 +388,23 @@ func saveRecord(svc Services, mode string, books []string, logs string, status s
 	}
 	_ = svc.Records.Save(record)
 	return record
+}
+
+func normalizePublishBooks(books []string) []string {
+	result := make([]string, 0, len(books))
+	seen := map[string]struct{}{}
+	for _, book := range books {
+		book = strings.TrimSpace(book)
+		if book == "" {
+			continue
+		}
+		if _, exists := seen[book]; exists {
+			continue
+		}
+		seen[book] = struct{}{}
+		result = append(result, book)
+	}
+	return result
 }
 
 func respondFileResult(c *gin.Context, data any, err error) {

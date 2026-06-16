@@ -12,4 +12,4 @@ global_nav:
     link: "/#book-list"
 custom_global_css: ""
 enable_sitemap: true
-enable_rss: false
+enable_rss: true

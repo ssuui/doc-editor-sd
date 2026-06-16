@@ -1,0 +1,21 @@
+:root {
+  --hextra-content-width: 70rem;
+}
+
+.content {
+  letter-spacing: 0.01em;
+}
+
+.content h2,
+.content h3 {
+  scroll-margin-top: calc(var(--hextra-navbar-height) + 1.5rem);
+}
+
+.content p,
+.content li {
+  line-height: 1.85;
+}
+
+.hextra-sidebar-active-item {
+  font-weight: 600;
+}

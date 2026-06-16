@@ -1,0 +1,15 @@
+:root {
+  --hextra-content-width: 76rem;
+}
+
+.content {
+  letter-spacing: 0.01em;
+}
+
+.content h2 {
+  margin-top: 2.5rem;
+}
+
+.content .hextra-cards {
+  margin-top: 2rem;
+}

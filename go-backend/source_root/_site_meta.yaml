@@ -1,10 +1,13 @@
 book_list:
-  - book_dir_name: "book_01_前端开发手册"
-    weight: 10
-    enable_home_show: true
-  - book_dir_name: "book_02_运维规范"
-    weight: 20
-    enable_home_show: true
-  - book_dir_name: "book_03_产品流程"
-    weight: 30
-    enable_home_show: false
+    - book_dir_name: book_01_工程协作手册
+      weight: 10
+      enable_home_show: true
+    - book_dir_name: book_02_交付运维手册
+      weight: 20
+      enable_home_show: true
+    - book_dir_name: book_03_产品需求流程
+      weight: 30
+      enable_home_show: true
+    - book_dir_name: book_04_产品交付流程
+      weight: 40
+      enable_home_show: true
