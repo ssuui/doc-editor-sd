@@ -3,26 +3,43 @@
 Thumbs.db
 .idea/
 .vscode/
+*.swp
+*.swo
 
 # Frontend
-frontend-project/node_modules/
-frontend-project/dist/
+web/node_modules/
+web/dist/
 
 # Backend build outputs
-go-backend/doc-publish-server
-go-backend/static_resources/
-go-backend/build_temp/
-go-backend/publish_records/
+service/doc-publish-server
+service/static_resources/
+service/build_temp/
+service/publish_records/
+release/
+
+# Backend runtime files
+service/*.log
+service/*.pid
+service/*.out
+service/.verify_token
+service/verify-server.log
+service/verify-server.pid
+service/build_temp/**/aa.php
+service/build_temp/**/.hugo_build.lock
 
 # Local runtime binaries
-go-backend/bin/hugo-extended
-go-backend/bin/hugo-extended*
-!/go-backend/bin/.gitkeep
-go-backend/config/system.yaml
-go-backend/global_theme/hextra/.git/
+service/bin/*
+!/service/bin/.gitkeep
+
+# Local config / vendored theme internals
+service/config/system.yaml
+service/global_theme/hextra/.git/
 *.hugo_build.lock
 
 # Logs / temp
 *.log
+*.pid
+*.out
+*.bak
 tmp/
 temp/

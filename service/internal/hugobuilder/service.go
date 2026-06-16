@@ -75,6 +75,9 @@ func (s *Service) BuildMainSite(sourceRoot string) (string, error) {
 			return "", err
 		}
 	}
+	if err := s.writeBooksPage(sourceRoot, contentDir); err != nil {
+		return "", err
+	}
 	if err := s.prepareMarkdownTree(contentDir, markdownPrepOptions{
 		RootTitle:    s.siteCfg.SiteTitle,
 		RootHasCards: true,
@@ -218,6 +221,22 @@ func JoinLogs(parts ...string) string {
 }
 
 func (s *Service) generatePortalIndex(sourceRoot string) (string, error) {
+	return s.generateBookListPage(sourceRoot, s.siteCfg.SiteTitle, true)
+}
+
+func (s *Service) writeBooksPage(sourceRoot string, contentDir string) error {
+	booksDir := filepath.Join(contentDir, booksPageSectionPath(s.siteCfg.BooksPagePath))
+	if err := os.MkdirAll(booksDir, 0o755); err != nil {
+		return err
+	}
+	generated, err := s.generateBookListPage(sourceRoot, s.booksPageTitle(), false)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(booksDir, "_index.md"), []byte(generated), 0o644)
+}
+
+func (s *Service) generateBookListPage(sourceRoot string, title string, includeHomeNotice bool) (string, error) {
 	siteMeta, err := configloader.LoadSiteMeta(filepath.Join(sourceRoot, "_site_meta.yaml"))
 	if err != nil {
 		return "", err
@@ -226,20 +245,24 @@ func (s *Service) generatePortalIndex(sourceRoot string) (string, error) {
 		return siteMeta.BookList[i].Weight < siteMeta.BookList[j].Weight
 	})
 	lines := []string{
-		"# " + s.siteCfg.SiteTitle,
-		"",
-		s.siteCfg.FooterText,
-		"",
-		"{{< callout type=\"info\" >}}",
-		"文档门户已切换为 Hextra 主题，支持全文搜索、暗色模式和更清晰的目录导航。",
-		"{{< /callout >}}",
+		"# " + title,
 		"",
 		"<div id=\"book-list\"></div>",
 		"",
 		"## 文档总览",
 		"",
-		"{{< cards cols=\"2\" >}}",
 	}
+	if includeHomeNotice && strings.TrimSpace(s.siteCfg.HomeNoticeText) != "" {
+		lines = append(lines,
+			"{{< callout type=\"info\" >}}",
+			s.siteCfg.HomeNoticeText,
+			"{{< /callout >}}",
+			"",
+		)
+	}
+	lines = append(lines,
+		"{{< cards cols=\"2\" >}}",
+	)
 	for _, item := range siteMeta.BookList {
 		if !item.EnableHomeShow {
 			continue
@@ -257,13 +280,29 @@ func (s *Service) generatePortalIndex(sourceRoot string) (string, error) {
 			subtitle = subtitle + "  标签：" + strings.Join(meta.Tags, " / ")
 		}
 		lines = append(lines,
-			fmt.Sprintf("{{< card link=\"/%s/\" title=\"%s\" subtitle=\"%s\" icon=\"book-open\" tag=\"%s\" >}}", item.BookDirName, escapeFrontMatterString(meta.DisplayName), escapeFrontMatterString(subtitle), escapeFrontMatterString(tag)),
+			fmt.Sprintf("{{< card link=\"/%s/index.html\" title=\"%s\" subtitle=\"%s\" icon=\"book-open\" tag=\"%s\" >}}", item.BookDirName, escapeFrontMatterString(meta.DisplayName), escapeFrontMatterString(subtitle), escapeFrontMatterString(tag)),
 		)
 	}
 	lines = append(lines,
 		"{{< /cards >}}",
 	)
 	return strings.Join(lines, "\n"), nil
+}
+
+func (s *Service) booksPageTitle() string {
+	if strings.TrimSpace(s.siteCfg.BooksPageTitle) != "" {
+		return strings.TrimSpace(s.siteCfg.BooksPageTitle)
+	}
+	return "全部书籍"
+}
+
+func booksPageSectionPath(configPath string) string {
+	cleaned := strings.TrimSpace(configPath)
+	cleaned = strings.Trim(cleaned, "/")
+	if cleaned == "" {
+		return "books"
+	}
+	return cleaned
 }
 
 type markdownPrepOptions struct {
@@ -417,9 +456,13 @@ link = "/"
 
 [params.footer]
 enable = true
-displayCopyright = true
+displayCopyright = false
 displayPoweredBy = false
 width = "wide"
+text = %q
+icpNumber = %q
+icpLink = %q
+copyright = %q
 
 [params.theme]
 default = "system"
@@ -432,7 +475,7 @@ type = "flexsearch"
 [params.page]
 width = "wide"
 
-%s`, s.siteCfg.SiteTitle, s.siteCfg.FooterText, strings.Join(nav, "\n")))
+%s`, s.siteCfg.SiteTitle, s.siteCfg.FooterText, s.siteCfg.FooterText, s.siteCfg.ICP.Number, s.siteCfg.ICP.Link, s.siteCfg.FooterCopyright, strings.Join(nav, "\n")))
 }
 
 func (s *Service) buildBookConfig(bookDir string, meta *configloader.BookMeta) string {
@@ -484,9 +527,13 @@ width = "wide"
 
 [params.footer]
 enable = true
-displayCopyright = true
+displayCopyright = false
 displayPoweredBy = false
 width = "wide"
+text = %q
+icpNumber = %q
+icpLink = %q
+copyright = %q
 
 [params.theme]
 default = "system"
@@ -503,5 +550,5 @@ width = "normal"
 displayTags = false
 
 %s
-`, "/"+bookDir+"/", meta.DisplayName, description, strings.Join(menuBlocks, "\n")))
+`, "/"+bookDir+"/", meta.DisplayName, description, s.siteCfg.FooterText, s.siteCfg.ICP.Number, s.siteCfg.ICP.Link, s.siteCfg.FooterCopyright, strings.Join(menuBlocks, "\n")))
 }

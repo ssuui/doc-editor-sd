@@ -1,0 +1,25 @@
+{{- $footer := .context.Site.Params.footer -}}
+{{- $text := $footer.text | default "" -}}
+{{- $icpNumber := $footer.icpNumber | default "" -}}
+{{- $icpLink := $footer.icpLink | default "" -}}
+{{- $copyright := $footer.copyright | default "" -}}
+
+{{- if or $text $icpNumber $copyright -}}
+  <div class="hx:flex hx:flex-col hx:items-center hx:gap-2 hx:py-6 hx:text-center hx:text-sm hx:md:items-start hx:md:text-left">
+    {{- if $text -}}
+      <div>{{ $text | markdownify }}</div>
+    {{- end -}}
+    {{- if $icpNumber -}}
+      <div>
+        {{- if $icpLink -}}
+          <a href="{{ $icpLink }}" target="_blank" rel="noopener noreferrer">{{ $icpNumber }}</a>
+        {{- else -}}
+          <span>{{ $icpNumber }}</span>
+        {{- end -}}
+      </div>
+    {{- end -}}
+    {{- if $copyright -}}
+      <div class="hx:text-xs">{{ $copyright | markdownify }}</div>
+    {{- end -}}
+  </div>
+{{- end -}}

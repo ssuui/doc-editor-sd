@@ -52,11 +52,21 @@ type SiteGlobalConfig struct {
 	SiteTitle       string         `yaml:"site_title"`
 	SiteLogo        string         `yaml:"site_logo"`
 	FooterText      string         `yaml:"footer_text"`
+	FooterCopyright string         `yaml:"footer_copyright"`
+	ICP             ICPConfig      `yaml:"icp"`
+	HomeNoticeText  string         `yaml:"home_notice_text"`
+	BooksPagePath   string         `yaml:"books_page_path"`
+	BooksPageTitle  string         `yaml:"books_page_title"`
 	HomeCardLayout  HomeCardLayout `yaml:"home_card_layout"`
 	GlobalNav       []NavItem      `yaml:"global_nav"`
 	CustomGlobalCSS string         `yaml:"custom_global_css"`
 	EnableSitemap   bool           `yaml:"enable_sitemap"`
 	EnableRSS       bool           `yaml:"enable_rss"`
+}
+
+type ICPConfig struct {
+	Number string `yaml:"number"`
+	Link   string `yaml:"link"`
 }
 
 type HomeCardLayout struct {
@@ -142,9 +152,14 @@ func DefaultSystemConfig() *SystemConfig {
 
 func DefaultSiteGlobalConfig() *SiteGlobalConfig {
 	return &SiteGlobalConfig{
-		SiteTitle:  "企业内部技术文档门户",
-		SiteLogo:   "/global_static/logo.svg",
-		FooterText: "文档自动发布系统 | Hugo静态生成 + S3静态托管",
+		SiteTitle:       "企业内部技术文档门户",
+		SiteLogo:        "/global_static/logo.svg",
+		FooterText:      "文档自动发布系统 | Hugo静态生成 + S3静态托管",
+		FooterCopyright: "",
+		ICP:             ICPConfig{},
+		HomeNoticeText:  "文档门户已切换为 Hextra 主题，支持全文搜索、暗色模式和更清晰的目录导航。",
+		BooksPagePath:   "/books/",
+		BooksPageTitle:  "全部书籍",
 		HomeCardLayout: HomeCardLayout{
 			ColumnCount:    3,
 			ShowBookDesc:   true,
@@ -152,7 +167,7 @@ func DefaultSiteGlobalConfig() *SiteGlobalConfig {
 		},
 		GlobalNav: []NavItem{
 			{Name: "门户首页", Link: "/"},
-			{Name: "全部书籍", Link: "/#book-list"},
+			{Name: "全部书籍", Link: "/books/index.html"},
 		},
 		EnableSitemap: true,
 		EnableRSS:     false,
