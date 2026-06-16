@@ -1,0 +1,9 @@
+display_name: "前端开发规范手册"
+cover_img: "https://assets.atlaslab.example/book-res/book_01_前端开发手册/static-img/cover.png"
+description: "前端工程化、组件开发、代码规范完整参考文档"
+tags: ["前端", "Vue3", "工程化"]
+version: "v1.3.0"
+visible_in_home: true
+extra_nav_links:
+  - name: "内部Wiki"
+    url: "https://wiki.atlaslab.example/frontend/standards"

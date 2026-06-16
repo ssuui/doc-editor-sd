@@ -1,0 +1,7 @@
+display_name: "产品流程"
+cover_img: "https://assets.atlaslab.example/book-res/book_03_产品流程/static-img/cover.png"
+description: "需求、评审、上线流程"
+tags: ["产品", "流程"]
+version: "v0.9.0"
+visible_in_home: false
+extra_nav_links: []

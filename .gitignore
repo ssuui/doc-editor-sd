@@ -1,0 +1,25 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Frontend
+frontend-project/node_modules/
+frontend-project/dist/
+
+# Backend build outputs
+go-backend/doc-publish-server
+go-backend/static_resources/
+go-backend/build_temp/
+go-backend/publish_records/
+
+# Local runtime binaries
+go-backend/bin/hugo-extended
+go-backend/bin/hugo-extended*
+!/go-backend/bin/.gitkeep
+
+# Logs / temp
+*.log
+tmp/
+temp/

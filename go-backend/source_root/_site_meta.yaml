@@ -1,0 +1,10 @@
+book_list:
+  - book_dir_name: "book_01_前端开发手册"
+    weight: 10
+    enable_home_show: true
+  - book_dir_name: "book_02_运维规范"
+    weight: 20
+    enable_home_show: true
+  - book_dir_name: "book_03_产品流程"
+    weight: 30
+    enable_home_show: false
