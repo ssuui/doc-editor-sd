@@ -1,0 +1,16 @@
+{{- $pages := .Site.RegularPages.ByWeight -}}
+{{- if gt (len $pages) 0 -}}
+  {{- $firstDoc := index $pages 0 -}}
+  <p class="hx:mt-6 hx:text-sm hx:text-gray-600 hx:dark:text-gray-400">
+    正在跳转到第一篇文档：
+    <a id="book-first-doc-link" class="hx:font-semibold hx:text-primary-600 hx:underline hx:underline-offset-4" href="{{ $firstDoc.RelPermalink | safeURL }}">{{ $firstDoc.LinkTitle }}</a>
+  </p>
+  <script>
+    (() => {
+      const link = document.getElementById("book-first-doc-link");
+      if (link && link.href) window.location.replace(link.href);
+    })();
+  </script>
+{{- else -}}
+  <p class="hx:mt-6 hx:text-sm hx:text-gray-600 hx:dark:text-gray-400">当前书本还没有可访问的文档页面。</p>
+{{- end -}}
