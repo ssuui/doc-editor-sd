@@ -1,5 +1,9 @@
 book_list:
-    - book_dir_name: book_01_工程协作手册
+    - book_dir_name: b_01_工程协作手册
       weight: 10
-    - book_dir_name: book_02_交付运维手册
+    - book_dir_name: b_02_交付运维手册
+      weight: 20
+    - book_dir_name: b_03_产品需求流程
       weight: 30
+    - book_dir_name: b_04_产品交付流程
+      weight: 40

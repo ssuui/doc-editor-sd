@@ -1,5 +1,5 @@
 display_name: "工程协作手册"
-cover_img: "https://assets.atlaslab.example/book-res/book_01_工程协作手册/static-img/cover.png"
+cover_img: "https://assets.atlaslab.example/book-res/b_01_工程协作手册/static-img/cover.png"
 description: "围绕研发日常协作的开发环境、代码评审与提交流程说明。"
 tags: ["研发", "协作", "前端"]
 version: "v2.1.0"

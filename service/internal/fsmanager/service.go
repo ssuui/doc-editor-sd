@@ -153,7 +153,7 @@ func (s *Service) CopyPath(rel string) (string, error) {
 }
 
 // UploadFile 将上传的文件写入源码目录。同名文件自动改名为"xxx-副本.ext"。
-// targetDir 是相对于 source_root 的目录路径(如 book_01/chapter)。
+// targetDir 是相对于 source_root 的目录路径(如 b_01/chapter)。
 func (s *Service) UploadFile(targetDir string, filename string, data []byte) (string, error) {
 	absDir, err := s.safePath(targetDir)
 	if err != nil {
@@ -396,7 +396,7 @@ func (s *Service) scanBooks() ([]scannedBook, error) {
 			continue
 		}
 		name := entry.Name()
-		if !strings.HasPrefix(name, "book_") {
+		if !strings.HasPrefix(name, "b_") {
 			continue
 		}
 		bookMetaPath := filepath.Join(s.root, name, "book_meta.yaml")
