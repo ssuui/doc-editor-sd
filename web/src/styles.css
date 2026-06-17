@@ -76,11 +76,17 @@ body {
   height: 100%;
   box-sizing: border-box;
   padding: 16px;
-  overflow: auto;
   color: var(--editor-foreground, #cccccc);
   background: var(--editor-background, #1e1e1e);
   user-select: text !important;
   -webkit-user-select: text !important;
+}
+
+.custom-pane-terminal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
 }
 
 .pane-title {
@@ -93,13 +99,15 @@ body {
 }
 
 .pane-meta {
-  margin-bottom: 8px;
   font-size: 12px;
   line-height: 1.5;
 }
 
+.pane-meta-success {
+  color: #9fe870;
+}
+
 .pane-activity {
-  margin: 10px 0 14px;
   padding: 10px 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
@@ -156,7 +164,7 @@ body {
 }
 
 .pane-log {
-  margin: 12px 0 0;
+  margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 12px;
@@ -165,6 +173,24 @@ body {
   user-select: text;
   -webkit-user-select: text;
   cursor: text;
+}
+
+.pane-log-terminal {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.pane-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .pane-log,

@@ -202,13 +202,13 @@ function getDocumentState(path: string) {
 
 function PublishPane() {
   const state = useAppState();
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const logRef = useRef<HTMLPreElement | null>(null);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    container.scrollTop = container.scrollHeight;
+    const log = logRef.current;
+    if (!log) return;
+    log.scrollTop = log.scrollHeight;
   }, [state.logs, state.publishState]);
 
   useEffect(() => {
@@ -228,23 +228,29 @@ function PublishPane() {
   const idleLabel = formatDuration(idleMs);
 
   return (
-    <div ref={containerRef} className="custom-pane">
+    <div className="custom-pane custom-pane-terminal">
       <div className="pane-title">发布日志</div>
-      <div className="pane-meta">状态：{state.publishState}</div>
-      {state.publishBusy ? (
-        <div className="pane-activity" aria-live="polite">
-          <div className="pane-activity-row">
-            <span className="pane-activity-spinner" aria-hidden="true">{spinner}</span>
-            <span>任务执行中，已等待 {elapsedLabel}</span>
-            <span className="pane-activity-idle">距上次日志 {idleLabel}</span>
+      <pre ref={logRef} className="pane-log pane-log-terminal">{state.logs || "暂无日志"}</pre>
+      <div className="pane-footer">
+        <div className="pane-meta">状态：{state.publishState}</div>
+        {state.publishBusy ? (
+          <div className="pane-activity" aria-live="polite">
+            <div className="pane-activity-row">
+              <span className="pane-activity-spinner" aria-hidden="true">{spinner}</span>
+              <span>任务执行中，已等待 {elapsedLabel}</span>
+              <span className="pane-activity-idle">距上次日志 {idleLabel}</span>
+            </div>
+            <div className="pane-activity-bar" aria-hidden="true">
+              <span className="pane-activity-bar-inner" />
+            </div>
           </div>
-          <div className="pane-activity-bar" aria-hidden="true">
-            <span className="pane-activity-bar-inner" />
+        ) : null}
+        {state.publishURL ? (
+          <div className="pane-meta pane-meta-success">
+            访问地址：<a href={state.publishURL} target="_blank" rel="noreferrer">{state.publishURL}</a>
           </div>
-        </div>
-      ) : null}
-      {state.publishURL ? <div className="pane-meta">访问地址：<a href={state.publishURL} target="_blank" rel="noreferrer">{state.publishURL}</a></div> : null}
-      <pre className="pane-log">{state.logs || "暂无日志"}</pre>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -760,7 +766,8 @@ function setupEditorIntegration() {
       run: () => triggerUploadImage()
     });
     editor.onDidFocusEditorText(() => {
-      const currentPath = activeEditorPath || getActiveTabPath();
+      const currentPath = getActiveTabSnapshot().path || getActiveTabPath() || activeEditorPath;
+      if (!currentPath) return;
       setActiveTab(currentPath, activeTabGroupId);
       bindEditorToPath(currentPath, editor);
       setActiveEditor(currentPath, editor);
@@ -768,7 +775,7 @@ function setupEditorIntegration() {
     // 非 Markdown 文件的内容变更:标记 edited。Markdown 由 MarkdownSplitPane
     // 自行管理 edited 状态,两边不能同时写 tab.status,否则会互相覆盖。
     editor.onDidChangeModelContent(() => {
-      const currentPath = getActiveTabPath();
+      const currentPath = getActiveTabSnapshot().path || getActiveTabPath();
       if (!currentPath || currentPath.endsWith(".md")) return;
       const value = editor.getValue();
       bindEditorToPath(currentPath, editor);
@@ -786,14 +793,15 @@ function setupEditorIntegration() {
     setActiveTab(path, groupId, tab?.data?.value || "");
     syncBook(path);
     if (!path.endsWith(".md")) {
-      window.setTimeout(() => {
+      const bindCurrentEditor = () => {
         const editor = molecule.editor.editorInstance;
-        if (editor) {
-          setActiveTab(path, groupId);
-          bindEditorToPath(path, editor);
-          setActiveEditor(path, editor);
-        }
-      }, 0);
+        if (!editor || !path) return;
+        setActiveTab(path, groupId);
+        bindEditorToPath(path, editor);
+        setActiveEditor(path, editor);
+      };
+      bindCurrentEditor();
+      window.setTimeout(bindCurrentEditor, 0);
     }
   });
 
