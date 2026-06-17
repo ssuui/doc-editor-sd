@@ -54,34 +54,6 @@ body {
   -webkit-user-select: text !important;
 }
 
-.history-list {
-  display: grid;
-  gap: 8px;
-}
-
-.history-item {
-  width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-  color: inherit;
-  padding: 10px 12px;
-  border-radius: 6px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.history-item strong,
-.history-item span {
-  display: block;
-}
-
-.history-item span {
-  margin-top: 4px;
-  opacity: 0.72;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
 .markdown-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 42%);

@@ -21,15 +21,6 @@ import "./styles.css";
 
 type TreeNode = { name: string; path: string; type: "file" | "folder"; children?: TreeNode[] };
 type BookItem = { book_dir_name: string; weight: number; enable_home_show: boolean };
-type RecordItem = {
-  record_id: string;
-  publishing_time: string;
-  publishing_type: string;
-  status: string;
-  public_url: string;
-  build_books?: string[];
-  full_log?: string;
-};
 type TaskInfo = { id: string; status: string; result_url: string; error_msg: string; done: boolean };
 
 type DialogState =
@@ -65,7 +56,6 @@ type AppState = {
   currentPath: string;
   currentContent: string;
   currentBook: string;
-  records: RecordItem[];
   logs: string;
   publishState: string;
   publishURL: string;
@@ -95,7 +85,6 @@ const store = createStore({
   currentPath: "",
   currentContent: "",
   currentBook: "",
-  records: [],
   logs: "",
   publishState: "空闲",
   publishURL: "",
@@ -161,7 +150,6 @@ let activeEditorPath = "";
 let currentTree: TreeNode[] = [];
 const fileContentCache = new Map<string, string>();
 let currentExpandKeys: string[] = ["source_root"];
-const RECORD_VIEW_PREFIX = "__publish_records__/";
 let closeGuardBypassDepth = 0;
 let closeGuardsInstalled = false;
 
@@ -185,31 +173,6 @@ function PublishPane() {
       <div className="pane-meta">状态：{state.publishState}</div>
       {state.publishURL ? <div className="pane-meta">访问地址：<a href={state.publishURL} target="_blank" rel="noreferrer">{state.publishURL}</a></div> : null}
       <pre className="pane-log">{state.logs || "暂无日志"}</pre>
-    </div>
-  );
-}
-
-function HistoryPane() {
-  const state = useAppState();
-
-  useEffect(() => {
-    if (state.records.length > 0) return;
-    void refreshPublishRecords();
-  }, [state.records.length]);
-
-  return (
-    <div className="custom-pane">
-      <div className="pane-title">发布记录</div>
-      <div className="pane-meta">共 {state.records.length} 条</div>
-      <div className="history-list">
-        {state.records.map((record) => (
-          <button key={record.record_id} className="history-item" onClick={() => void loadRecord(record.record_id)}>
-            <strong>{record.publishing_time}</strong>
-            <span>{record.publishing_type === "full" ? "完整发布" : "单书发布"} | {record.status}</span>
-            <span>{record.build_books?.filter(Boolean).join("、") || "未记录书籍"}</span>
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -503,8 +466,7 @@ async function setupWorkbench() {
 
 function setupPanels() {
   const panels: IPanelItem[] = [
-    { id: "publish", name: "发布日志", closable: false, renderPane: () => <PublishPane /> },
-    { id: "history", name: "发布记录", closable: false, renderPane: () => <HistoryPane /> }
+    { id: "publish", name: "发布日志", closable: false, renderPane: () => <PublishPane /> }
   ];
   molecule.panel.add(panels);
   molecule.panel.open(panels[0]);
@@ -792,10 +754,9 @@ async function rebuildSiteMeta() {
 
 async function refreshAll() {
   const expandedKeys = currentExpandKeys.length ? currentExpandKeys : molecule.folderTree.getExpandKeys().map(String);
-  const [siteTree, books, records] = await Promise.all([
+  const [siteTree, books] = await Promise.all([
     request<TreeNode[]>("/api/fs/site/root-tree"),
-    request<BookItem[]>("/api/fs/book/list"),
-    fetchPublishRecords()
+    request<BookItem[]>("/api/fs/book/list")
   ]);
 
   currentTree = siteTree;
@@ -803,16 +764,6 @@ async function refreshAll() {
   if (!store.get().currentBook && books[0]) {
     syncBook(books[0].book_dir_name);
   }
-  store.set({ records });
-}
-
-async function fetchPublishRecords() {
-  return request<RecordItem[]>("/api/publish/record/list");
-}
-
-async function refreshPublishRecords() {
-  const records = await fetchPublishRecords();
-  store.set({ records });
 }
 
 function renderTree(tree: TreeNode[], expandedKeys: Array<string | number> = [], forceExpandPaths: string[] = []) {
@@ -1259,50 +1210,6 @@ function subscribePublish(taskId: string) {
     stream.close();
     store.set({ publishState: "发布流已断开" });
   };
-}
-
-async function loadRecord(recordId: string) {
-  const detail = await request<RecordItem & { full_log: string }>(`/api/publish/record/detail?recordId=${encodeURIComponent(recordId)}`);
-  const books = detail.build_books?.filter(Boolean).join("、") || "未记录书籍";
-  const content = [
-    `记录时间: ${detail.publishing_time || "-"}`,
-    `发布类型: ${detail.publishing_type === "full" ? "完整发布" : "单书发布"}`,
-    `发布状态: ${detail.status || "-"}`,
-    `书籍目录: ${books}`,
-    `访问地址: ${detail.public_url || "-"}`,
-    "",
-    "==== 发布日志 ====",
-    "",
-    detail.full_log || "暂无日志"
-  ].join("\n");
-  const path = `${RECORD_VIEW_PREFIX}${detail.record_id}.log`;
-  const existingGroupId = molecule.editor.getGroupIdByTab(path);
-  const tab = {
-    id: path,
-    name: `${detail.record_id}.log`,
-    data: {
-      path,
-      value: content,
-      language: "plaintext",
-      modified: false
-    },
-    renderPane: (_: unknown, currentTab?: { data?: { path?: string; value?: string; language?: string } }) => (
-      <ReadonlyTextPane
-        path={currentTab?.data?.path || path}
-        value={currentTab?.data?.value || content}
-        language={currentTab?.data?.language || "plaintext"}
-      />
-    )
-  };
-  if (existingGroupId !== null) {
-    const existing = molecule.editor.getTabById(path, existingGroupId);
-    if (existing) {
-      molecule.editor.updateTab({ ...existing, ...tab, data: { ...(existing.data || {}), ...(tab.data || {}) } }, existingGroupId);
-      molecule.editor.setActive(existingGroupId, path);
-      return;
-    }
-  }
-  molecule.editor.open(tab);
 }
 
 async function logout() {
@@ -2113,7 +2020,6 @@ function canCloseTabs(tabs: Array<{ id?: string | number; name?: string; data?: 
 
 function isTabModified(tab: { data?: { modified?: boolean; path?: string } | undefined; status?: string; name?: string }) {
   const path = tab.data?.path || "";
-  if (path.startsWith(RECORD_VIEW_PREFIX)) return false;
   if (path === WORKBENCH_SETTINGS_PATH) return Boolean(tab.data?.modified);
   return Boolean(tab.data?.modified || tab.status === "edited");
 }
@@ -2142,17 +2048,15 @@ async function refreshAllWithHints(extraPaths: string[] = [], activePath = "") {
     ...currentExpandKeys,
     ...extraPaths.flatMap(getAncestorPaths)
   ].filter(Boolean)));
-  const [siteTree, books, records] = await Promise.all([
+  const [siteTree, books] = await Promise.all([
     request<TreeNode[]>("/api/fs/site/root-tree"),
-    request<BookItem[]>("/api/fs/book/list"),
-    fetchPublishRecords()
+    request<BookItem[]>("/api/fs/book/list")
   ]);
   currentTree = siteTree;
   renderTree(siteTree, expandedKeys, [...extraPaths, activePath]);
   if (!store.get().currentBook && books[0]) {
     syncBook(books[0].book_dir_name);
   }
-  store.set({ records });
 }
 
 function detectBookFromPath(path: string) {
