@@ -110,12 +110,34 @@ npm run build
 
 前端产物会输出到 `web/dist`，发布脚本会自动复制到 `service/static_resources`。
 
+## 开发构建
+
+在仓库根目录执行：
+
+```bash
+./build_dev.sh
+```
+
+这个脚本会：
+
+- 安装前端依赖（如缺失）
+- 构建前端静态资源
+- 同步 `web/dist` 到 `service/static_resources`
+- 编译 Go 服务到 `service/doc-publish-server`
+- 自动创建开发所需目录，例如 `service/build_temp`、`service/publish_records`
+
+兼容旧入口的写法：
+
+```bash
+./build_script.sh dev
+```
+
 ## 打包 release
 
 在仓库根目录执行：
 
 ```bash
-./build_script.sh
+./build_release.sh
 ```
 
 这个脚本会完成：
@@ -123,6 +145,7 @@ npm run build
 - 安装前端依赖（如缺失）
 - 构建前端静态资源
 - 编译 Go 服务
+- 自动创建发布所需目录
 - 复制 Hugo、配置、主题、文档源文件
 - 生成 `release/` 目录
 
@@ -132,6 +155,24 @@ npm run build
 cd release
 ./verify.sh
 ./run.sh
+```
+
+兼容旧入口的写法：
+
+```bash
+./build_script.sh release
+```
+
+新的发布目录结构为：
+
+```text
+release/
+├── runtime/       # 可执行程序、Hugo、主题、前端静态资源
+├── config/        # 配置文件
+├── source_root/   # 文档源数据
+├── var/           # 构建临时目录、发布记录
+├── run.sh
+└── verify.sh
 ```
 
 ## 主要接口能力

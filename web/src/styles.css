@@ -10,6 +10,68 @@ body {
   overflow: hidden;
 }
 
+.mo-sidebar__search-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.mo-sidebar__search-pane .mo-sidebar__content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mo-sidebar__search-pane .mo-search {
+  flex-shrink: 0;
+}
+
+.mo-sidebar__search-pane .mo-search__tree,
+.mo-sidebar__search-pane .mo-tree {
+  flex: 1;
+  min-height: 0;
+}
+
+.mo-sidebar__search-pane .mo-search__tree {
+  margin-top: 5px;
+  overflow: auto;
+  padding-bottom: 12px;
+}
+
+.mo-editor__group-header {
+  min-width: 0;
+}
+
+.mo-editor__group-tabs,
+.mo-editor__group-tabs .mo-tabs,
+.mo-editor__group-tabs .mo-tabs__header,
+.mo-editor__group-tabs .mo-scrollBar__wrapper {
+  min-width: 0;
+}
+
+.mo-editor__group-tabs .mo-scrollBar__wrapper {
+  overflow-x: hidden;
+  overflow-y: hidden;
+}
+
+.mo-editor__group-tabs .mo-scrollBar__container--horizontal {
+  min-width: max-content;
+}
+
+.mo-editor__group-tabs .mo-tab__item {
+  flex: 0 0 auto;
+  max-width: 220px;
+}
+
+.mo-editor__group-tabs .mo-tab__item__label,
+.mo-editor__group-tabs .mo-tab__item {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .custom-pane {
   height: 100%;
   box-sizing: border-box;
@@ -34,6 +96,63 @@ body {
   margin-bottom: 8px;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.pane-activity {
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.pane-activity-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.pane-activity-spinner {
+  display: inline-block;
+  width: 1ch;
+  color: #7dcfff;
+  font-weight: 700;
+  text-align: center;
+}
+
+.pane-activity-idle {
+  margin-left: auto;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.pane-activity-bar {
+  position: relative;
+  margin-top: 8px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.pane-activity-bar-inner {
+  position: absolute;
+  inset: 0 auto 0 -35%;
+  width: 35%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(125, 207, 255, 0), rgba(125, 207, 255, 0.95), rgba(125, 207, 255, 0));
+  animation: pane-activity-slide 1.35s ease-in-out infinite;
+}
+
+@keyframes pane-activity-slide {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(390%);
+  }
 }
 
 .pane-log {

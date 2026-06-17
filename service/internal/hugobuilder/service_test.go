@@ -1,0 +1,105 @@
+package hugobuilder
+
+import (
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+)
+
+func TestNormalizeYAMLFrontMatterUsesBodyH1AsTitle(t *testing.T) {
+	input := strings.Join([]string{
+		"---",
+		"weight: 20",
+		"---",
+		"",
+		"# 页面标题",
+		"",
+		"正文",
+	}, "\n")
+
+	output := string(normalizeMarkdown([]byte(input), "guide.md", markdownPrepOptions{}, 0, false))
+
+	if !strings.Contains(output, "title: 页面标题\n") {
+		t.Fatalf("expected body h1 to be promoted into front matter title, got:\n%s", output)
+	}
+}
+
+func TestNormalizeMarkdownSupportsUTF8BOMBeforeH1(t *testing.T) {
+	input := "\uFEFF# 带 BOM 的标题\n\n正文\n"
+
+	output := string(normalizeMarkdown([]byte(input), "guide.md", markdownPrepOptions{}, 0, false))
+
+	if !strings.Contains(output, "title: \"带 BOM 的标题\"") {
+		t.Fatalf("expected BOM-prefixed h1 to be extracted as title, got:\n%s", output)
+	}
+}
+
+func TestBuildSidebarWeightsPromotesSectionsFromConfiguredChildren(t *testing.T) {
+	files := []string{
+		"_index.md",
+		"README.md",
+		"quick-start/_index.md",
+		"quick-start/install.md",
+		"quick-start/overview.md",
+		"lifecycle.md",
+	}
+
+	weights := buildSidebarWeights(files, []string{
+		"README.md",
+		"quick-start/install.md",
+		"quick-start/overview.md",
+		"lifecycle.md",
+	})
+
+	if weights["quick-start/_index.md"] != 20 {
+		t.Fatalf("expected section to inherit first configured child weight, got %d", weights["quick-start/_index.md"])
+	}
+	if weights["quick-start/install.md"] != 20 {
+		t.Fatalf("expected configured child weight to remain stable, got %d", weights["quick-start/install.md"])
+	}
+	if weights["lifecycle.md"] != 40 {
+		t.Fatalf("expected later root page weight to remain stable, got %d", weights["lifecycle.md"])
+	}
+}
+
+func TestAncestorSectionIndexes(t *testing.T) {
+	got := ancestorSectionIndexes("guide/setup/install.md")
+	want := []string{"guide/setup/_index.md", "guide/_index.md"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected ancestor sections: got %v want %v", got, want)
+	}
+}
+
+func TestEnsureSectionIndexFilesCreatesMissingIndexes(t *testing.T) {
+	contentDir := t.TempDir()
+	sectionDir := filepath.Join(contentDir, "01-快速开始")
+	if err := os.MkdirAll(filepath.Join(sectionDir, "nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pagePath := filepath.Join(sectionDir, "安装.md")
+	if err := os.WriteFile(pagePath, []byte("# 安装\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	nestedPagePath := filepath.Join(sectionDir, "nested", "更多说明.md")
+	if err := os.WriteFile(nestedPagePath, []byte("# 更多说明\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ensureSectionIndexFiles(contentDir); err != nil {
+		t.Fatalf("ensureSectionIndexFiles failed: %v", err)
+	}
+
+	indexRaw, err := os.ReadFile(filepath.Join(sectionDir, "_index.md"))
+	if err != nil {
+		t.Fatalf("expected generated _index.md: %v", err)
+	}
+	indexText := string(indexRaw)
+	if !strings.Contains(indexText, "title: \"快速开始\"") {
+		t.Fatalf("expected generated title from directory name, got:\n%s", indexText)
+	}
+	if _, err := os.Stat(filepath.Join(sectionDir, "nested", "_index.md")); err != nil {
+		t.Fatalf("expected nested directory to receive _index.md: %v", err)
+	}
+}

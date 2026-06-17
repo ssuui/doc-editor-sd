@@ -333,6 +333,9 @@ type markdownPrepOptions struct {
 }
 
 func (s *Service) prepareMarkdownTree(contentDir string, opts markdownPrepOptions) error {
+	if err := ensureSectionIndexFiles(contentDir); err != nil {
+		return err
+	}
 	files := make([]string, 0, 32)
 	if err := filepath.Walk(contentDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -367,8 +370,54 @@ func (s *Service) prepareMarkdownTree(contentDir string, opts markdownPrepOption
 	return nil
 }
 
+func ensureSectionIndexFiles(contentDir string) error {
+	return filepath.Walk(contentDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() || path == contentDir {
+			return nil
+		}
+		indexPath := filepath.Join(path, "_index.md")
+		if _, statErr := os.Stat(indexPath); statErr == nil {
+			return nil
+		} else if !os.IsNotExist(statErr) {
+			return statErr
+		}
+		entries, readErr := os.ReadDir(path)
+		if readErr != nil {
+			return readErr
+		}
+		hasContent := false
+		for _, entry := range entries {
+			if entry.IsDir() {
+				hasContent = true
+				break
+			}
+			name := entry.Name()
+			if strings.EqualFold(name, "_index.md") {
+				continue
+			}
+			if filepath.Ext(name) == ".md" {
+				hasContent = true
+				break
+			}
+		}
+		if !hasContent {
+			return nil
+		}
+		rel, relErr := filepath.Rel(contentDir, indexPath)
+		if relErr != nil {
+			return relErr
+		}
+		content := normalizeMarkdown(nil, filepath.ToSlash(rel), markdownPrepOptions{}, 0, false)
+		return os.WriteFile(indexPath, content, 0o644)
+	})
+}
+
 func normalizeMarkdown(raw []byte, rel string, opts markdownPrepOptions, weight int, hasWeight bool) []byte {
 	text := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	text = strings.TrimPrefix(text, "\uFEFF")
 	if strings.HasPrefix(text, "---\n") {
 		return normalizeYAMLFrontMatter(text, rel, opts, weight, hasWeight)
 	}
@@ -421,7 +470,12 @@ func normalizeYAMLFrontMatter(text string, rel string, opts markdownPrepOptions,
 		}
 	}
 	if strings.TrimSpace(fmt.Sprint(data["title"])) == "" || data["title"] == nil {
-		data["title"] = fallbackTitleFromPath(rel)
+		bodyTitle, _ := extractLeadingH1(body)
+		if bodyTitle != "" {
+			data["title"] = bodyTitle
+		} else {
+			data["title"] = fallbackTitleFromPath(rel)
+		}
 	}
 	if hasWeight {
 		data["weight"] = weight
@@ -488,12 +542,20 @@ func buildSidebarWeights(files []string, sidebarOrder []string) map[string]int {
 		groups[group] = append(groups[group], rel)
 	}
 	configured := make(map[string]int, len(sidebarOrder))
+	inferredSections := make(map[string]int)
 	for idx, item := range sidebarOrder {
 		target := normalizeSidebarOrderItem(item)
 		if target == "" {
 			continue
 		}
-		configured[target] = (idx + 1) * 10
+		weight := (idx + 1) * 10
+		configured[target] = weight
+		for _, sectionRel := range ancestorSectionIndexes(target) {
+			current, ok := inferredSections[sectionRel]
+			if !ok || weight < current {
+				inferredSections[sectionRel] = weight
+			}
+		}
 	}
 	defaultStart := (len(sidebarOrder) + 1) * 10
 	for _, rels := range groups {
@@ -502,6 +564,10 @@ func buildSidebarWeights(files []string, sidebarOrder []string) map[string]int {
 		for _, rel := range rels {
 			if configuredWeight, ok := configured[rel]; ok {
 				weights[rel] = configuredWeight
+				continue
+			}
+			if inferredWeight, ok := inferredSections[rel]; ok {
+				weights[rel] = inferredWeight
 			}
 		}
 		for _, rel := range rels {
@@ -513,6 +579,19 @@ func buildSidebarWeights(files []string, sidebarOrder []string) map[string]int {
 		}
 	}
 	return weights
+}
+
+func ancestorSectionIndexes(rel string) []string {
+	parent := filepath.ToSlash(filepath.Dir(rel))
+	if parent == "." || parent == "" {
+		return nil
+	}
+	sections := make([]string, 0, 4)
+	for parent != "." && parent != "" {
+		sections = append(sections, filepath.ToSlash(filepath.Join(parent, "_index.md")))
+		parent = filepath.ToSlash(filepath.Dir(parent))
+	}
+	return sections
 }
 
 func normalizeSidebarOrderItem(item string) string {
@@ -549,6 +628,7 @@ func sidebarGroupKey(rel string) string {
 }
 
 func extractLeadingH1(text string) (string, string) {
+	text = strings.TrimPrefix(text, "\uFEFF")
 	lines := strings.Split(text, "\n")
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
@@ -566,6 +646,7 @@ func extractLeadingH1(text string) (string, string) {
 }
 
 func hasFrontMatter(text string) bool {
+	text = strings.TrimPrefix(text, "\uFEFF")
 	return strings.HasPrefix(text, "---\n") || strings.HasPrefix(text, "+++\n")
 }
 

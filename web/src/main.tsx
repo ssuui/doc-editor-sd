@@ -59,6 +59,9 @@ type AppState = {
   logs: string;
   publishState: string;
   publishURL: string;
+  publishBusy: boolean;
+  publishStartedAt: number;
+  publishLastEventAt: number;
   treeContextPath: string;
   treeContextType: "file" | "folder" | "";
   dialog: DialogState | null;
@@ -88,6 +91,9 @@ const store = createStore({
   logs: "",
   publishState: "空闲",
   publishURL: "",
+  publishBusy: false,
+  publishStartedAt: 0,
+  publishLastEventAt: 0,
   treeContextPath: "",
   treeContextType: "",
   dialog: null,
@@ -195,6 +201,7 @@ function getDocumentState(path: string) {
 function PublishPane() {
   const state = useAppState();
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -202,14 +209,52 @@ function PublishPane() {
     container.scrollTop = container.scrollHeight;
   }, [state.logs, state.publishState]);
 
+  useEffect(() => {
+    if (!state.publishBusy) return;
+    const timer = window.setInterval(() => {
+      setTick((value) => value + 1);
+    }, 240);
+    return () => window.clearInterval(timer);
+  }, [state.publishBusy]);
+
+  const now = Date.now();
+  const elapsedMs = state.publishStartedAt ? Math.max(0, now - state.publishStartedAt) : 0;
+  const idleMs = state.publishLastEventAt ? Math.max(0, now - state.publishLastEventAt) : 0;
+  const spinnerFrames = ["|", "/", "-", "\\"];
+  const spinner = spinnerFrames[tick % spinnerFrames.length];
+  const elapsedLabel = formatDuration(elapsedMs);
+  const idleLabel = formatDuration(idleMs);
+
   return (
     <div ref={containerRef} className="custom-pane">
       <div className="pane-title">发布日志</div>
       <div className="pane-meta">状态：{state.publishState}</div>
+      {state.publishBusy ? (
+        <div className="pane-activity" aria-live="polite">
+          <div className="pane-activity-row">
+            <span className="pane-activity-spinner" aria-hidden="true">{spinner}</span>
+            <span>任务执行中，已等待 {elapsedLabel}</span>
+            <span className="pane-activity-idle">距上次日志 {idleLabel}</span>
+          </div>
+          <div className="pane-activity-bar" aria-hidden="true">
+            <span className="pane-activity-bar-inner" />
+          </div>
+        </div>
+      ) : null}
       {state.publishURL ? <div className="pane-meta">访问地址：<a href={state.publishURL} target="_blank" rel="noreferrer">{state.publishURL}</a></div> : null}
       <pre className="pane-log">{state.logs || "暂无日志"}</pre>
     </div>
   );
+}
+
+function formatDuration(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes > 0) {
+    return `${minutes}分${seconds.toString().padStart(2, "0")}秒`;
+  }
+  return `${seconds}秒`;
 }
 
 function DialogLayer() {
@@ -512,6 +557,7 @@ async function setupWorkbench() {
   setupSearchIntegration();
   setupThemePersistence();
   setupUiLocalization();
+  setupOverflowImprovements();
   await refreshAll();
 }
 
@@ -1118,11 +1164,21 @@ async function uploadImage(file: File) {
   }
   const ext = validateUpload(file);
   molecule.panel.open({ id: "publish", name: "发布日志", closable: false, renderPane: () => <PublishPane /> });
-  store.set({ logs: "正在获取云存储上传凭证...", publishState: "正在上传附件" });
+  const now = Date.now();
+  store.set({
+    logs: "正在获取云存储上传凭证...",
+    publishState: "正在上传附件",
+    publishBusy: true,
+    publishStartedAt: now,
+    publishLastEventAt: now
+  });
   const params = await request<{ put_url: string; cdn_img_url: string; content_type: string; acl: string }>(
     `/api/fs/get-s3-upload-params?bookDirName=${encodeURIComponent(currentBook)}&ext=${encodeURIComponent(ext)}`
   );
-  store.set({ logs: `${store.get().logs}\n正在上传附件至云存储...` });
+  store.set({
+    logs: `${store.get().logs}\n正在上传附件至云存储...`,
+    publishLastEventAt: Date.now()
+  });
   // The presigned URL signs "content-type" and "x-amz-acl", so the PUT MUST
   // echo those exact header values back, otherwise S3/COS returns 403.
   const res = await fetch(params.put_url, {
@@ -1159,7 +1215,12 @@ async function uploadImage(file: File) {
   } else {
     store.set({ currentContent: `${store.get().currentContent}${snippet}` });
   }
-  store.set({ logs: `${store.get().logs}\n附件上传完成`, publishState: "空闲" });
+  store.set({
+    logs: `${store.get().logs}\n附件上传完成`,
+    publishState: "空闲",
+    publishBusy: false,
+    publishLastEventAt: Date.now()
+  });
   molecule.notification.add([{
     id: `upload-${Date.now()}`,
     value: `附件已上传：${file.name}`,
@@ -1286,10 +1347,14 @@ async function startPublish(mode: "full" | "single", explicitBook?: string) {
     : store.get().currentBook;
   if (mode === "single" && !currentBook) return;
   if (currentBook) syncBook(currentBook);
+  const now = Date.now();
   store.set({
     logs: "",
     publishURL: "",
-    publishState: mode === "full" ? "正在完整发布" : `正在发布 ${currentBook}`
+    publishState: mode === "full" ? "正在完整发布" : `正在发布 ${currentBook}`,
+    publishBusy: true,
+    publishStartedAt: now,
+    publishLastEventAt: now
   });
   molecule.panel.open({ id: "publish", name: "发布日志", closable: false, renderPane: () => <PublishPane /> });
   const url = mode === "full" ? "/api/publish/full-site" : `/api/publish/single-book?bookDirName=${encodeURIComponent(currentBook)}`;
@@ -1303,13 +1368,18 @@ function subscribePublish(taskId: string) {
   stream.addEventListener("log", (event) => {
     const payload = JSON.parse((event as MessageEvent).data) as { line: string };
     const prev = store.get().logs;
-    store.set({ logs: prev ? `${prev}\n${payload.line}` : payload.line });
+    store.set({
+      logs: prev ? `${prev}\n${payload.line}` : payload.line,
+      publishLastEventAt: Date.now()
+    });
   });
   stream.addEventListener("status", (event) => {
     const payload = JSON.parse((event as MessageEvent).data) as TaskInfo;
     store.set({
       publishState: payload.status || "处理中",
-      publishURL: payload.result_url || store.get().publishURL
+      publishURL: payload.result_url || store.get().publishURL,
+      publishBusy: !payload.done,
+      publishLastEventAt: Date.now()
     });
     if (payload.error_msg) notifyError(payload.error_msg);
     if (payload.done) {
@@ -1319,7 +1389,11 @@ function subscribePublish(taskId: string) {
   });
   stream.onerror = () => {
     stream.close();
-    store.set({ publishState: "发布流已断开" });
+    store.set({
+      publishState: "发布流已断开",
+      publishBusy: false,
+      publishLastEventAt: Date.now()
+    });
   };
 }
 
@@ -2100,6 +2174,41 @@ function localizeSettingsTab() {
       molecule.editor.updateTab({ ...currentTab, name: "工作台设置.json" }, group.id);
     });
   });
+}
+
+function setupOverflowImprovements() {
+  const syncActiveTabIntoView = () => {
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>(".mo-editor .mo-tab__item--active")?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "nearest"
+      });
+    });
+  };
+
+  const bindTabWheelScroll = () => {
+    document.querySelectorAll<HTMLElement>(".mo-editor__group-tabs .mo-scrollBar__wrapper").forEach((wrapper) => {
+      if (wrapper.dataset.cmsWheelBound === "true") return;
+      wrapper.dataset.cmsWheelBound = "true";
+      wrapper.addEventListener("wheel", (event) => {
+        if (Math.abs(event.deltaY) <= Math.abs(event.deltaX) || !wrapper.scrollWidth || wrapper.scrollWidth <= wrapper.clientWidth) {
+          return;
+        }
+        event.preventDefault();
+        wrapper.scrollLeft += event.deltaY;
+      }, { passive: false });
+    });
+  };
+
+  const apply = () => {
+    bindTabWheelScroll();
+    syncActiveTabIntoView();
+  };
+
+  apply();
+  const observer = new MutationObserver(() => apply());
+  observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
 }
 
 function openWorkbenchSettingsEditor() {

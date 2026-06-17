@@ -21,16 +21,20 @@ import (
 )
 
 func main() {
-	systemCfg, err := configloader.LoadSystemConfig("./config/system.yaml")
+	systemConfigPath := getenvDefault("APP_SYSTEM_CONFIG", "./config/system.yaml")
+	siteConfigPath := getenvDefault("APP_SITE_CONFIG", "./config/site_global.yaml")
+	staticDir := getenvDefault("APP_STATIC_DIR", "./static_resources")
+
+	systemCfg, err := configloader.LoadSystemConfig(systemConfigPath)
 	if err != nil {
 		log.Fatal(err)
 	}
-	siteCfg, err := configloader.LoadSiteGlobalConfig("./config/site_global.yaml")
+	siteCfg, err := configloader.LoadSiteGlobalConfig(siteConfigPath)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	mustEnsureDirs(systemCfg)
+	mustEnsureDirs(systemCfg, staticDir)
 
 	filelock.StartCleanup(30*time.Minute, 2*time.Hour)
 	auth.StartCleanup()
@@ -56,23 +60,30 @@ func main() {
 		Tasks:     publishtask.New(),
 		Records:   recordstore.New(systemCfg.PublishRecordPath),
 		SourceDir: systemCfg.SourceRootPath,
-	}, "./static_resources")
+	}, staticDir)
 
 	log.Fatal(router.Run((fmt.Sprintf(":%d", systemCfg.HTTPPort))))
 }
 
-func mustEnsureDirs(cfg *configloader.SystemConfig) {
+func mustEnsureDirs(cfg *configloader.SystemConfig, staticDir string) {
 	for _, dir := range []string{
 		cfg.SourceRootPath,
 		cfg.BuildTempRoot,
 		cfg.PublishRecordPath,
-		"./static_resources",
+		staticDir,
 		filepath.Dir(cfg.HugoBinPath),
 	} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			log.Fatal(err)
 		}
 	}
+}
+
+func getenvDefault(key string, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
 }
 
 func cleanTemp(root string, interval time.Duration) {
