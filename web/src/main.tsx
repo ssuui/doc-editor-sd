@@ -108,7 +108,7 @@ const store = createStore({
 marked.setOptions({ gfm: true, breaks: true });
 
 const FOLDER_PANEL_ID = "sidebar.explore.folders";
-const EDITOR_UPLOAD_ACTION_ID = "editor.upload-image";
+const EDITOR_UPLOAD_ACTION_ID = "editor.upload-asset";
 const EXPLORER_NEW_FILE_ID = "custom.new-file";
 const EXPLORER_NEW_FOLDER_ID = "custom.new-folder";
 const EXPLORER_REFRESH_ID = "custom.refresh";
@@ -660,7 +660,7 @@ function setupEditorIntegration() {
   const editorActions: IEditorActionsProps[] = [
     {
       id: EDITOR_UPLOAD_ACTION_ID,
-      title: "上传图片",
+      title: "上传附件",
       icon: "cloud-upload",
       place: "outer"
     }
@@ -946,7 +946,7 @@ async function triggerUploadImage() {
     const file = input.files?.[0];
     if (!file) return;
     void uploadImage(file).catch((error: unknown) => {
-      notifyError(error instanceof Error ? error.message : "图片上传失败");
+      notifyError(error instanceof Error ? error.message : "附件上传失败");
     });
   };
   input.click();
@@ -1380,7 +1380,7 @@ function buildInsertedSnippet(file: File, url: string) {
   if (isImage) {
     return `\n![${file.name}](${url})\n`;
   }
-  return `\n[${file.name}](${url})\n`;
+  return `\n[附件：${file.name}](${url})\n`;
 }
 
 function getEditorTabName(path: string) {
