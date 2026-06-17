@@ -3,39 +3,428 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>登录</title>
+  <title>管理登录</title>
   <style>
-    body { margin: 0; font-family: sans-serif; background: linear-gradient(135deg,#16324f,#f4efe6); min-height: 100vh; display: grid; place-items: center; }
-    form { width: min(360px,92vw); background: rgba(255,255,255,.92); padding: 28px; border-radius: 18px; box-shadow: 0 18px 48px rgba(18,42,64,.18); }
-    input, button { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid #c8d3df; margin-top: 12px; box-sizing: border-box; }
-    button { background: #16324f; color: #fff; border: 0; cursor: pointer; }
+    :root {
+      color-scheme: light;
+      --bg-top: #f5ede1;
+      --bg-bottom: #dce7f2;
+      --card-bg: rgba(255, 252, 247, 0.92);
+      --card-border: rgba(255, 255, 255, 0.72);
+      --text-main: #19324a;
+      --text-muted: #61758a;
+      --primary: #1e4f7a;
+      --primary-hover: #163d61;
+      --primary-shadow: rgba(30, 79, 122, 0.28);
+      --input-bg: rgba(255, 255, 255, 0.84);
+      --input-border: rgba(86, 111, 135, 0.22);
+      --input-focus: rgba(30, 79, 122, 0.18);
+      --error-bg: rgba(181, 53, 53, 0.1);
+      --error-text: #9f2f2f;
+      --success-bg: rgba(31, 123, 84, 0.12);
+      --success-text: #176847;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      min-height: 100%;
+      background:
+        radial-gradient(circle at top left, rgba(255, 255, 255, 0.75), transparent 34%),
+        radial-gradient(circle at right 18%, rgba(56, 107, 150, 0.18), transparent 28%),
+        linear-gradient(160deg, var(--bg-top), var(--bg-bottom));
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      min-height: 100svh;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--text-main);
+      overflow-x: hidden;
+    }
+
+    .login-shell {
+      position: relative;
+      min-height: 100vh;
+      min-height: 100svh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(24px, 6vw, 48px);
+    }
+
+    .login-shell::before,
+    .login-shell::after {
+      content: "";
+      position: absolute;
+      border-radius: 999px;
+      filter: blur(8px);
+      pointer-events: none;
+    }
+
+    .login-shell::before {
+      width: 240px;
+      height: 240px;
+      top: 8%;
+      left: -72px;
+      background: rgba(255, 255, 255, 0.42);
+    }
+
+    .login-shell::after {
+      width: 280px;
+      height: 280px;
+      right: -90px;
+      bottom: 4%;
+      background: rgba(30, 79, 122, 0.12);
+    }
+
+    .login-card {
+      position: relative;
+      width: min(920px, 100%);
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(320px, 420px);
+      border: 1px solid var(--card-border);
+      border-radius: 28px;
+      background: var(--card-bg);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 28px 80px rgba(16, 39, 60, 0.16);
+      overflow: hidden;
+    }
+
+    .login-hero {
+      padding: clamp(32px, 5vw, 54px);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0)),
+        linear-gradient(155deg, #214b72, #0d2438);
+      color: #f6f0e8;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 28px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      color: rgba(255, 248, 239, 0.9);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .login-hero h1 {
+      margin: 18px 0 12px;
+      font-size: clamp(32px, 4.6vw, 52px);
+      line-height: 1.02;
+      letter-spacing: -0.03em;
+    }
+
+    .login-hero p {
+      margin: 0;
+      max-width: 460px;
+      color: rgba(246, 240, 232, 0.8);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    .hero-points {
+      display: grid;
+      gap: 12px;
+      margin-top: auto;
+    }
+
+    .hero-point {
+      padding: 14px 16px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(255, 244, 235, 0.92);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .login-panel {
+      padding: clamp(28px, 4vw, 42px);
+      display: flex;
+      align-items: center;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.18)),
+        rgba(255, 252, 247, 0.72);
+    }
+
+    .login-form {
+      width: 100%;
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+    }
+
+    .panel-subtitle {
+      margin: 10px 0 0;
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .form-grid {
+      display: grid;
+      gap: 14px;
+      margin-top: 28px;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+    }
+
+    .field label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .field input {
+      width: 100%;
+      border: 1px solid var(--input-border);
+      border-radius: 16px;
+      background: var(--input-bg);
+      padding: 14px 16px;
+      font-size: 15px;
+      color: var(--text-main);
+      outline: none;
+      transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+    }
+
+    .field input::placeholder {
+      color: #90a0af;
+    }
+
+    .field input:focus {
+      border-color: rgba(30, 79, 122, 0.4);
+      box-shadow: 0 0 0 5px var(--input-focus);
+      background: #fff;
+    }
+
+    .message {
+      display: flex;
+      align-items: center;
+      min-height: 48px;
+      margin-top: 18px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      font-size: 14px;
+      line-height: 1.5;
+      visibility: hidden;
+      opacity: 0;
+      transition: opacity 140ms ease;
+    }
+
+    .message.is-visible {
+      visibility: visible;
+      opacity: 1;
+    }
+
+    .message.is-error {
+      background: var(--error-bg);
+      color: var(--error-text);
+    }
+
+    .message.is-success {
+      background: var(--success-bg);
+      color: var(--success-text);
+    }
+
+    .submit-button {
+      width: 100%;
+      margin-top: 6px;
+      border: 0;
+      border-radius: 16px;
+      padding: 14px 16px;
+      background: linear-gradient(135deg, var(--primary), #2e658f);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      box-shadow: 0 14px 30px var(--primary-shadow);
+      transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease, opacity 160ms ease;
+    }
+
+    .submit-button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 18px 36px rgba(30, 79, 122, 0.34);
+      background: linear-gradient(135deg, var(--primary-hover), #24557e);
+    }
+
+    .submit-button:active {
+      transform: translateY(0);
+    }
+
+    .submit-button:disabled {
+      cursor: wait;
+      opacity: 0.9;
+      transform: none;
+      box-shadow: 0 12px 24px rgba(30, 79, 122, 0.2);
+    }
+
+    .login-footnote {
+      margin: 18px 0 0;
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 820px) {
+      .login-card {
+        grid-template-columns: 1fr;
+      }
+
+      .login-hero {
+        min-height: auto;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .login-shell {
+        padding: 16px;
+        align-items: stretch;
+      }
+
+      .login-card {
+        border-radius: 22px;
+      }
+
+      .login-hero,
+      .login-panel {
+        padding: 24px;
+      }
+
+      .panel-title {
+        font-size: 24px;
+      }
+    }
   </style>
 </head>
 <body>
-  <form id="login-form">
-    <h2>管理登录</h2>
-    <input id="username" placeholder="用户名" value="">
-    <input id="password" type="password" placeholder="密码" value="">
-    <button type="submit">登录</button>
-  </form>
+  <main class="login-shell">
+    <section class="login-card">
+      <aside class="login-hero">
+        <div>
+          <div class="eyebrow">CMS Console</div>
+          <h1>把发布和协作<br>收进一个安静的入口</h1>
+          <p>登录后可以继续维护书籍内容、检查发布状态和处理站点资源。界面保留了固定提示区，提交时不会因为报错提示或按钮状态切换产生明显跳动。</p>
+        </div>
+        <div class="hero-points">
+          <div class="hero-point">更稳：错误提示直接显示在表单里，避免浏览器弹窗打断输入节奏。</div>
+          <div class="hero-point">更顺：提交中按钮会锁定，并显示处理状态，减少重复点击。</div>
+          <div class="hero-point">更轻：移动端改用更稳定的视口高度处理，页面不会因为居中重算而上下漂。</div>
+        </div>
+      </aside>
+
+      <div class="login-panel">
+        <form id="login-form" class="login-form" novalidate>
+          <h2 class="panel-title">管理登录</h2>
+          <p class="panel-subtitle">输入管理员账号与密码，继续进入内容工作台。</p>
+
+          <div class="form-grid">
+            <div class="field">
+              <label for="username">用户名</label>
+              <input id="username" name="username" autocomplete="username" placeholder="请输入用户名" value="">
+            </div>
+            <div class="field">
+              <label for="password">密码</label>
+              <input id="password" name="password" type="password" autocomplete="current-password" placeholder="请输入密码" value="">
+            </div>
+          </div>
+
+          <div id="form-message" class="message" role="status" aria-live="polite"></div>
+          <button id="submit-button" class="submit-button" type="submit">登录进入工作台</button>
+          <p class="login-footnote">如果密码错误，提示会显示在按钮上方，表单主体高度保持不变。</p>
+        </form>
+      </div>
+    </section>
+  </main>
+
   <script>
-    document.getElementById('login-form').addEventListener('submit', async function (e) {
-      e.preventDefault();
-      const res = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: document.getElementById('username').value,
-          password: document.getElementById('password').value
-        })
-      });
-      const json = await res.json();
-      if (json.code === 0) {
-        localStorage.setItem('token', json.data.token);
-        location.href = '/';
+    const form = document.getElementById('login-form');
+    const usernameInput = document.getElementById('username');
+    const passwordInput = document.getElementById('password');
+    const submitButton = document.getElementById('submit-button');
+    const message = document.getElementById('form-message');
+    const defaultButtonText = submitButton.textContent;
+
+    function setMessage(text, type) {
+      message.textContent = text || '';
+      message.className = 'message';
+      if (!text) {
         return;
       }
-      alert(json.msg || '登录失败');
+      message.classList.add('is-visible', type === 'success' ? 'is-success' : 'is-error');
+    }
+
+    function setSubmitting(submitting) {
+      submitButton.disabled = submitting;
+      usernameInput.disabled = submitting;
+      passwordInput.disabled = submitting;
+      submitButton.textContent = submitting ? '正在验证身份...' : defaultButtonText;
+    }
+
+    form.addEventListener('submit', async function (event) {
+      event.preventDefault();
+
+      const username = usernameInput.value.trim();
+      const password = passwordInput.value;
+
+      if (!username) {
+        setMessage('请输入用户名。', 'error');
+        usernameInput.focus();
+        return;
+      }
+
+      if (!password) {
+        setMessage('请输入密码。', 'error');
+        passwordInput.focus();
+        return;
+      }
+
+      setMessage('正在提交登录请求，请稍候...', 'success');
+      setSubmitting(true);
+
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+
+        const result = await response.json();
+        if (result.code === 0 && result.data && result.data.token) {
+          localStorage.setItem('token', result.data.token);
+          setMessage('登录成功，正在进入工作台...', 'success');
+          location.href = '/';
+          return;
+        }
+
+        setMessage(result.msg || '登录失败，请检查用户名和密码。', 'error');
+        passwordInput.focus();
+        passwordInput.select();
+      } catch (error) {
+        setMessage('网络异常，暂时无法登录，请稍后重试。', 'error');
+      } finally {
+        setSubmitting(false);
+      }
     });
   </script>
 </body>

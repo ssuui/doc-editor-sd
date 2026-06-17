@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "rm -rf dist && mkdir -p dist/assets && ./node_modules/.bin/esbuild src/main.tsx --bundle --minify --sourcemap --outfile=dist/assets/app.js --loader:.ts=ts --loader:.tsx=tsx --loader:.css=css --loader:.ttf=file && cp public/index.html dist/index.html && cp public/login.html dist/login.html"
+    "build": "rm -rf dist && mkdir -p dist/assets && ./node_modules/.bin/esbuild src/main.tsx --bundle --minify --sourcemap --outfile=dist/assets/app.js --loader:.ts=ts --loader:.tsx=tsx --loader:.css=css --loader:.ttf=file && cp public/index.html dist/index.html && cp public/login.html dist/login.html && if [ -f public/favicon.ico ]; then cp public/favicon.ico dist/favicon.ico; fi"
   },
   "dependencies": {
     "@dtinsight/molecule": "^1.3.6",

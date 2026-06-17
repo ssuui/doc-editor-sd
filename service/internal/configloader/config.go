@@ -98,6 +98,7 @@ type BookMeta struct {
 	Version       string        `yaml:"version"`
 	VisibleInHome bool          `yaml:"visible_in_home"`
 	ExtraNavLinks []BookNavLink `yaml:"extra_nav_links"`
+	SidebarOrder  []string      `yaml:"sidebar_order"`
 }
 
 type BookNavLink struct {

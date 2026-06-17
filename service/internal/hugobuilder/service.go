@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"doc-publish-server/internal/configloader"
+	"gopkg.in/yaml.v3"
 )
 
 type Service struct {
@@ -131,6 +132,7 @@ func (s *Service) BuildBook(sourceRoot string, bookDir string) (string, error) {
 	if err := s.prepareMarkdownTree(filepath.Join(buildSource, "content"), markdownPrepOptions{
 		RootTitle:       bookMeta.DisplayName,
 		RootCascadeDocs: true,
+		SidebarOrder:    bookMeta.SidebarOrder,
 	}); err != nil {
 		return "", err
 	}
@@ -327,10 +329,12 @@ type markdownPrepOptions struct {
 	RootTitle       string
 	RootCascadeDocs bool
 	RootHasCards    bool
+	SidebarOrder    []string
 }
 
 func (s *Service) prepareMarkdownTree(contentDir string, opts markdownPrepOptions) error {
-	return filepath.Walk(contentDir, func(path string, info os.FileInfo, err error) error {
+	files := make([]string, 0, 32)
+	if err := filepath.Walk(contentDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -341,17 +345,33 @@ func (s *Service) prepareMarkdownTree(contentDir string, opts markdownPrepOption
 		if relErr != nil {
 			return relErr
 		}
+		files = append(files, filepath.ToSlash(rel))
+		return nil
+	}); err != nil {
+		return err
+	}
+	sort.Strings(files)
+	weights := buildSidebarWeights(files, opts.SidebarOrder)
+	for _, rel := range files {
+		path := filepath.Join(contentDir, filepath.FromSlash(rel))
 		raw, readErr := os.ReadFile(path)
 		if readErr != nil {
 			return readErr
 		}
-		updated := normalizeMarkdown(raw, rel, opts)
-		return os.WriteFile(path, updated, 0o644)
-	})
+		weight, hasWeight := weights[rel]
+		updated := normalizeMarkdown(raw, rel, opts, weight, hasWeight)
+		if err := os.WriteFile(path, updated, 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func normalizeMarkdown(raw []byte, rel string, opts markdownPrepOptions) []byte {
+func normalizeMarkdown(raw []byte, rel string, opts markdownPrepOptions, weight int, hasWeight bool) []byte {
 	text := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	if strings.HasPrefix(text, "---\n") {
+		return normalizeYAMLFrontMatter(text, rel, opts, weight, hasWeight)
+	}
 	if hasFrontMatter(text) {
 		return []byte(text)
 	}
@@ -365,6 +385,9 @@ func normalizeMarkdown(raw []byte, rel string, opts markdownPrepOptions) []byte 
 	frontMatter := make([]string, 0, 8)
 	frontMatter = append(frontMatter, "---")
 	frontMatter = append(frontMatter, fmt.Sprintf("title: \"%s\"", escapeFrontMatterString(title)))
+	if hasWeight {
+		frontMatter = append(frontMatter, fmt.Sprintf("weight: %d", weight))
+	}
 	if rel == "_index.md" && opts.RootCascadeDocs {
 		frontMatter = append(frontMatter, "cascade:")
 		frontMatter = append(frontMatter, "  type: docs")
@@ -378,6 +401,151 @@ func normalizeMarkdown(raw []byte, rel string, opts markdownPrepOptions) []byte 
 		return []byte(strings.Join(frontMatter, "\n") + body + ensureTrailingNewline(body))
 	}
 	return []byte(strings.Join(frontMatter, "\n"))
+}
+
+func normalizeYAMLFrontMatter(text string, rel string, opts markdownPrepOptions, weight int, hasWeight bool) []byte {
+	frontMatterText, body, ok := splitYAMLFrontMatter(text)
+	if !ok {
+		return []byte(text)
+	}
+	data := map[string]any{}
+	if err := yaml.Unmarshal([]byte(frontMatterText), &data); err != nil {
+		return []byte(text)
+	}
+	if data == nil {
+		data = map[string]any{}
+	}
+	if rel == "_index.md" && opts.RootTitle != "" {
+		if strings.TrimSpace(fmt.Sprint(data["title"])) == "" || data["title"] == nil {
+			data["title"] = opts.RootTitle
+		}
+	}
+	if strings.TrimSpace(fmt.Sprint(data["title"])) == "" || data["title"] == nil {
+		data["title"] = fallbackTitleFromPath(rel)
+	}
+	if hasWeight {
+		data["weight"] = weight
+	}
+	if rel == "_index.md" && opts.RootCascadeDocs {
+		ensureCascadeDocs(data)
+	}
+	return marshalYAMLFrontMatter(data, body)
+}
+
+func splitYAMLFrontMatter(text string) (string, string, bool) {
+	lines := strings.Split(text, "\n")
+	if len(lines) < 3 || lines[0] != "---" {
+		return "", "", false
+	}
+	for i := 1; i < len(lines); i++ {
+		if lines[i] == "---" {
+			frontMatter := strings.Join(lines[1:i], "\n")
+			body := strings.Join(lines[i+1:], "\n")
+			return frontMatter, body, true
+		}
+	}
+	return "", "", false
+}
+
+func marshalYAMLFrontMatter(data map[string]any, body string) []byte {
+	raw, err := yaml.Marshal(data)
+	if err != nil {
+		return []byte(body)
+	}
+	result := strings.Builder{}
+	result.WriteString("---\n")
+	result.Write(raw)
+	result.WriteString("---\n")
+	if body != "" {
+		result.WriteString(body)
+		if !strings.HasSuffix(body, "\n") {
+			result.WriteString("\n")
+		}
+	}
+	return []byte(result.String())
+}
+
+func ensureCascadeDocs(data map[string]any) {
+	cascade, ok := data["cascade"]
+	if !ok || cascade == nil {
+		data["cascade"] = map[string]any{"type": "docs"}
+		return
+	}
+	cascadeMap, ok := cascade.(map[string]any)
+	if !ok {
+		return
+	}
+	if strings.TrimSpace(fmt.Sprint(cascadeMap["type"])) == "" || cascadeMap["type"] == nil {
+		cascadeMap["type"] = "docs"
+	}
+}
+
+func buildSidebarWeights(files []string, sidebarOrder []string) map[string]int {
+	weights := make(map[string]int, len(files))
+	groups := make(map[string][]string)
+	for _, rel := range files {
+		group := sidebarGroupKey(rel)
+		groups[group] = append(groups[group], rel)
+	}
+	configured := make(map[string]int, len(sidebarOrder))
+	for idx, item := range sidebarOrder {
+		target := normalizeSidebarOrderItem(item)
+		if target == "" {
+			continue
+		}
+		configured[target] = (idx + 1) * 10
+	}
+	defaultStart := (len(sidebarOrder) + 1) * 10
+	for _, rels := range groups {
+		sort.Strings(rels)
+		nextWeight := defaultStart
+		for _, rel := range rels {
+			if configuredWeight, ok := configured[rel]; ok {
+				weights[rel] = configuredWeight
+			}
+		}
+		for _, rel := range rels {
+			if _, ok := weights[rel]; ok {
+				continue
+			}
+			weights[rel] = nextWeight
+			nextWeight += 10
+		}
+	}
+	return weights
+}
+
+func normalizeSidebarOrderItem(item string) string {
+	cleaned := strings.TrimSpace(item)
+	cleaned = strings.Trim(cleaned, "/")
+	cleaned = filepath.ToSlash(cleaned)
+	if cleaned == "" || cleaned == "." {
+		return ""
+	}
+	if strings.HasSuffix(cleaned, "/_index.md") || strings.HasSuffix(cleaned, ".md") {
+		return cleaned
+	}
+	return cleaned + "/_index.md"
+}
+
+func sidebarGroupKey(rel string) string {
+	cleaned := filepath.ToSlash(rel)
+	if cleaned == "_index.md" {
+		return "."
+	}
+	if strings.HasSuffix(cleaned, "/_index.md") {
+		sectionPath := strings.TrimSuffix(cleaned, "/_index.md")
+		parent := filepath.ToSlash(filepath.Dir(sectionPath))
+		if parent == "." || parent == "" {
+			return "."
+		}
+		return parent
+	}
+	parent := filepath.ToSlash(filepath.Dir(cleaned))
+	if parent == "." || parent == "" {
+		return "."
+	}
+	return parent
 }
 
 func extractLeadingH1(text string) (string, string) {

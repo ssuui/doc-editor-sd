@@ -7,3 +7,6 @@ visible_in_home: true
 extra_nav_links:
   - name: "研发周会纪要"
     url: "https://wiki.atlaslab.example/team/rnd-weekly"
+sidebar_order:
+  - 02-代码评审
+  - 01-开发环境

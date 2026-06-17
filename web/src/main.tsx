@@ -147,14 +147,49 @@ const mo = create({ extensions: [customLocaleExtension], defaultLocale: "zh-CN-c
 let bootstrapped = false;
 let activeEditorInstance: MonacoEditorNS.IStandaloneCodeEditor | null = null;
 let activeEditorPath = "";
+let activeTabPath = "";
+let activeTabGroupId: string | number | undefined;
 let currentTree: TreeNode[] = [];
 const fileContentCache = new Map<string, string>();
+const documentStateByPath = new Map<string, {
+  content: string;
+  modified: boolean;
+  groupId?: string | number;
+}>();
+const editorInstanceByPath = new Map<string, MonacoEditorNS.IStandaloneCodeEditor>();
 let currentExpandKeys: string[] = ["source_root"];
+let explorerContextTarget: { path: string; type?: "file" | "folder" } | null = null;
 let closeGuardBypassDepth = 0;
 let closeGuardsInstalled = false;
 
 function useAppState() {
   return useSyncExternalStore(store.subscribe, store.get, store.get);
+}
+
+function updateDocumentState(path: string, patch: {
+  content?: string;
+  modified?: boolean;
+  groupId?: string | number;
+}) {
+  if (!path) return null;
+  const prev = documentStateByPath.get(path) || { content: fileContentCache.get(path) || "", modified: false };
+  const next = {
+    content: patch.content ?? prev.content,
+    modified: patch.modified ?? prev.modified,
+    groupId: patch.groupId ?? prev.groupId
+  };
+  documentStateByPath.set(path, next);
+  if (typeof patch.content === "string") {
+    fileContentCache.set(path, patch.content);
+  }
+  if (activeTabPath === path || store.get().currentPath === path) {
+    store.set({ currentPath: path, currentContent: next.content });
+  }
+  return next;
+}
+
+function getDocumentState(path: string) {
+  return path ? documentStateByPath.get(path) || null : null;
 }
 
 function PublishPane() {
@@ -288,13 +323,38 @@ function MarkdownSplitPane({
 }: {
   path: string;
   value: string;
-  groupId?: string;
+  groupId?: string | number;
 }) {
   const editorRef = useRef<MonacoEditorNS.IStandaloneCodeEditor | null>(null);
   const changeSubscriptionRef = useRef<{ dispose: () => void } | null>(null);
   const focusSubscriptionRef = useRef<{ dispose: () => void } | null>(null);
   const syncingRef = useRef(false);
   const [previewHTML, setPreviewHTML] = useState(() => renderMarkdown(value));
+
+  const rebindEditor = (editor: MonacoEditorNS.IStandaloneCodeEditor) => {
+    changeSubscriptionRef.current?.dispose();
+    focusSubscriptionRef.current?.dispose();
+    editorRef.current = editor;
+    bindEditorToPath(path, editor);
+    setActiveEditor(path, editor);
+    attachCustomEditorContextMenu(editor);
+    registerEditorCommands(editor);
+
+    changeSubscriptionRef.current = editor.onDidChangeModelContent(() => {
+      if (syncingRef.current) return;
+      const nextValue = editor.getValue();
+      updateDocumentState(path, { content: nextValue, modified: true, groupId });
+      setActiveTab(path, groupId, nextValue);
+      markTabEdited(path, groupId);
+      setPreviewHTML(renderMarkdown(nextValue));
+    });
+
+    focusSubscriptionRef.current = editor.onDidFocusEditorText(() => {
+      bindEditorToPath(path, editor);
+      setActiveTab(path, groupId, editor.getValue());
+      setActiveEditor(path, editor);
+    });
+  };
 
   // 切换文件(path 变化)时,用新内容覆盖编辑器。注意 editor.setValue 会清空
   // 撤销栈,所以不能在 value 变化时执行 —— 否则用户每输入一个字符,父组件
@@ -312,9 +372,21 @@ function MarkdownSplitPane({
   }, [path]);
 
   useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    rebindEditor(editor);
+    // 这里要在 path/groupId 变化时强制重绑。Molecule 在多 tab 间可能复用
+    // 同一个 Monaco 实例，如果不重绑，监听器里的 path 会停留在旧文件。
+  }, [path, groupId]);
+
+  useEffect(() => {
     return () => {
       changeSubscriptionRef.current?.dispose();
       focusSubscriptionRef.current?.dispose();
+      const boundEditor = editorInstanceByPath.get(path);
+      if (boundEditor && boundEditor === editorRef.current) {
+        editorInstanceByPath.delete(path);
+      }
       if (activeEditorPath === path) {
         activeEditorInstance = null;
         activeEditorPath = "";
@@ -323,28 +395,7 @@ function MarkdownSplitPane({
   }, [path]);
 
   const bindEditor = (editor: MonacoEditorNS.IStandaloneCodeEditor) => {
-    if (editorRef.current === editor) return;
-
-    changeSubscriptionRef.current?.dispose();
-    focusSubscriptionRef.current?.dispose();
-    editorRef.current = editor;
-    setActiveEditor(path, editor);
-    attachCustomEditorContextMenu(editor);
-    registerEditorCommands(editor);
-
-    changeSubscriptionRef.current = editor.onDidChangeModelContent(() => {
-      if (syncingRef.current) return;
-      const nextValue = editor.getValue();
-      fileContentCache.set(path, nextValue);
-      store.set({ currentPath: path, currentContent: nextValue });
-      markTabEdited(path, groupId);
-      setPreviewHTML(renderMarkdown(nextValue));
-    });
-
-    focusSubscriptionRef.current = editor.onDidFocusEditorText(() => {
-      setActiveEditor(path, editor);
-      store.set({ currentPath: path, currentContent: editor.getValue() });
-    });
+    rebindEditor(editor);
   };
 
   return (
@@ -549,6 +600,7 @@ function setupFolderTree() {
   molecule.folderTree.onSelectFile((file) => {
     if (file.location) {
       molecule.folderTree.setActive(file.location);
+      explorerContextTarget = { path: file.location, type: "file" };
       store.set({ treeContextPath: file.location, treeContextType: "file" });
       void openFile(file.location);
     }
@@ -557,6 +609,10 @@ function setupFolderTree() {
     if (!node?.location) return;
     syncBook(node.location);
     molecule.folderTree.setActive(node.location);
+    explorerContextTarget = {
+      path: node.location,
+      type: node.fileType === "Folder" || node.fileType === "RootFolder" ? "folder" : "file"
+    };
     store.set({
       treeContextPath: node.location,
       treeContextType: node.fileType === "Folder" || node.fileType === "RootFolder" ? "folder" : "file"
@@ -646,19 +702,22 @@ function setupEditorIntegration() {
       run: () => triggerUploadImage()
     });
     editor.onDidFocusEditorText(() => {
-      const currentPath = getActiveTabPath();
+      const currentPath = activeEditorPath || getActiveTabPath();
+      setActiveTab(currentPath, activeTabGroupId);
+      bindEditorToPath(currentPath, editor);
       setActiveEditor(currentPath, editor);
     });
     // 非 Markdown 文件的内容变更:标记 edited。Markdown 由 MarkdownSplitPane
     // 自行管理 edited 状态,两边不能同时写 tab.status,否则会互相覆盖。
     editor.onDidChangeModelContent(() => {
-      const current = molecule.editor.getState().current;
-      const currentPath = current?.tab?.data?.path || getActiveTabPath();
-      if (!current?.tab || currentPath.endsWith(".md")) return;
+      const currentPath = getActiveTabPath();
+      if (!currentPath || currentPath.endsWith(".md")) return;
       const value = editor.getValue();
-      store.set({ currentContent: value, currentPath });
+      bindEditorToPath(currentPath, editor);
+      updateDocumentState(currentPath, { content: value, modified: true, groupId: activeTabGroupId });
+      setActiveTab(currentPath, activeTabGroupId, value);
       setActiveEditor(currentPath, editor);
-      syncEditorTabState(currentPath, { value, modified: true }, current.id);
+      syncEditorTabState(currentPath, { value, modified: true }, activeTabGroupId);
     });
   });
 
@@ -666,15 +725,16 @@ function setupEditorIntegration() {
     if (groupId === undefined) return;
     const tab = molecule.editor.getTabById(tabId, groupId);
     const path = tab?.data?.path || "";
-    store.set({
-      currentPath: path,
-      currentContent: tab?.data?.value || ""
-    });
+    setActiveTab(path, groupId, tab?.data?.value || "");
     syncBook(path);
     if (!path.endsWith(".md")) {
       window.setTimeout(() => {
         const editor = molecule.editor.editorInstance;
-        if (editor) setActiveEditor(path, editor);
+        if (editor) {
+          setActiveTab(path, groupId);
+          bindEditorToPath(path, editor);
+          setActiveEditor(path, editor);
+        }
       }, 0);
     }
   });
@@ -690,6 +750,20 @@ function setupEditorIntegration() {
     event.preventDefault();
     openCommandPaletteNotice();
   }, { capture: true });
+}
+
+function getActiveTabSnapshot() {
+  const path = activeTabPath || store.get().currentPath;
+  const tracked = path ? findEditorTabByPath(path, activeTabGroupId) : null;
+  const current = molecule.editor.getState().current;
+  const currentTab = tracked?.tab || current?.tab;
+  const docState = getDocumentState(path);
+  return {
+    groupId: tracked?.groupId ?? docState?.groupId ?? activeTabGroupId ?? current?.id,
+    tab: currentTab,
+    path: currentTab?.data?.path || path,
+    value: docState?.content ?? (typeof currentTab?.data?.value === "string" ? currentTab.data.value : undefined)
+  };
 }
 
 function setupSearchIntegration() {
@@ -814,12 +888,33 @@ type SearchLeafData = {
 };
 
 async function openFile(path: string, location?: OpenFileOptions) {
+  const existing = findEditorTabByPath(path);
+  if (existing) {
+    const existingState = getDocumentState(path);
+    const existingContent = existingState?.content
+      ?? (typeof existing.tab.data?.value === "string" ? existing.tab.data.value : fileContentCache.get(path) ?? "");
+    syncBook(path);
+    store.set({
+      currentPath: path,
+      currentContent: existingContent,
+      treeContextPath: path,
+      treeContextType: "file"
+    });
+    updateDocumentState(path, { content: existingContent, groupId: existing.groupId, modified: existingState?.modified ?? Boolean(existing.tab.data?.modified) });
+    setActiveTab(path, existing.groupId, existingContent);
+    molecule.editor.setActive(existing.groupId, path);
+    if (location?.lineNumber && isEditablePath(path)) {
+      focusEditorLocation(path, location);
+    }
+    return;
+  }
   const data = isPreviewablePath(path)
     ? { content: "" }
     : await request<{ content: string }>(`/api/fs/file/content?path=${encodeURIComponent(path)}`);
   if (!isPreviewablePath(path)) {
     fileContentCache.set(path, data.content);
   }
+  updateDocumentState(path, { content: data.content, modified: false });
   syncBook(path);
   store.set({
     currentPath: path,
@@ -831,16 +926,20 @@ async function openFile(path: string, location?: OpenFileOptions) {
   const alreadyOpen = groupId !== null ? molecule.editor.getTabById(path, groupId) : undefined;
   const nextTab = buildEditorTab(path, data.content);
   if (alreadyOpen && groupId !== null) {
+    const content = getDocumentState(path)?.content ?? (typeof alreadyOpen.data?.value === "string" ? alreadyOpen.data.value : data.content);
+    updateDocumentState(path, { content, groupId, modified: getDocumentState(path)?.modified ?? false });
+    setActiveTab(path, groupId, content);
     molecule.editor.setActive(groupId, path);
     molecule.editor.updateTab({
       ...alreadyOpen,
       ...nextTab,
       name: getEditorTabName(path),
-      status: undefined,
+      status: getDocumentState(path)?.modified ? "edited" : undefined,
       data: {
         ...(alreadyOpen.data || {}),
         ...(nextTab.data || {}),
-        modified: false
+        value: content,
+        modified: getDocumentState(path)?.modified ?? false
       }
     }, groupId);
     if (location?.lineNumber && isEditablePath(path)) {
@@ -849,16 +948,28 @@ async function openFile(path: string, location?: OpenFileOptions) {
     return;
   }
   molecule.editor.open(nextTab);
+  const openedGroupId = molecule.editor.getGroupIdByTab(path) ?? undefined;
+  updateDocumentState(path, { content: data.content, modified: false, groupId: openedGroupId });
+  setActiveTab(path, openedGroupId, data.content);
   if (location?.lineNumber && isEditablePath(path)) {
     focusEditorLocation(path, location);
   }
 }
 
 async function saveCurrentFile() {
-  const currentPath = getActiveTabPath();
+  const activeTab = getActiveTabSnapshot();
+  const currentPath = activeTab.path;
   if (!currentPath) return;
   if (!isEditablePath(currentPath) && currentPath !== WORKBENCH_SETTINGS_PATH) return;
-  const content = getCurrentEditorValue();
+  const content = getCurrentEditorValue(currentPath);
+  console.debug("[cms-save]", {
+    path: currentPath,
+    groupId: activeTab.groupId,
+    contentLength: content.length,
+    cachedLength: (fileContentCache.get(currentPath) || "").length,
+    hasEditorInstance: editorInstanceByPath.has(currentPath),
+    activeEditorPath
+  });
   if (currentPath === WORKBENCH_SETTINGS_PATH) {
     applyWorkbenchSettings(content);
     markCurrentTabSaved(store.get().currentContent);
@@ -1218,7 +1329,7 @@ async function logout() {
   location.href = "/login.html";
 }
 
-function syncBook(path: string) {
+function syncBook(path?: string) {
   const book = detectBookFromPath(path);
   if (!book) return;
   store.set({ currentBook: book });
@@ -1265,11 +1376,11 @@ function buildEditorTab(path: string, value: string) {
             <PdfPreviewPane path={tab?.data?.path || path} />
           )
       : isMarkdown
-        ? (_: unknown, tab?: { data?: { path?: string; value?: string } }, group?: { id?: string }) => (
+        ? (_: unknown, tab?: { data?: { path?: string; value?: string } }, group?: { id?: string | number }) => (
           <MarkdownSplitPane
             path={tab?.data?.path || path}
             value={tab?.data?.value || ""}
-            groupId={group?.id?.toString()}
+            groupId={group?.id}
           />
         )
         : undefined
@@ -1295,6 +1406,25 @@ function getEditorTabName(path: string) {
 }
 
 function findEditorTabByPath(path: string, preferredGroupId?: string | number) {
+  const docState = getDocumentState(path);
+  if (docState?.groupId !== undefined) {
+    const docTab = molecule.editor.getTabById(path, docState.groupId);
+    if (docTab) {
+      return {
+        groupId: docState.groupId,
+        tab: docTab
+      };
+    }
+  }
+  if (activeTabPath === path && activeTabGroupId !== undefined) {
+    const activeTab = molecule.editor.getTabById(path, activeTabGroupId);
+    if (activeTab) {
+      return {
+        groupId: activeTabGroupId,
+        tab: activeTab
+      };
+    }
+  }
   const current = molecule.editor.getState().current;
   if (current?.tab?.data?.path === path && current.id !== undefined) {
     return {
@@ -1302,14 +1432,19 @@ function findEditorTabByPath(path: string, preferredGroupId?: string | number) {
       tab: current.tab
     };
   }
-  const targetGroupId = preferredGroupId ?? molecule.editor.getGroupIdByTab(path);
-  if (targetGroupId === null || targetGroupId === undefined) return null;
-  const tab = molecule.editor.getTabById(path, targetGroupId);
-  if (!tab) return null;
-  return {
-    groupId: targetGroupId,
-    tab
-  };
+  const triedGroupIds = Array.from(new Set([
+    preferredGroupId,
+    molecule.editor.getGroupIdByTab(path)
+  ].filter((groupId): groupId is string | number => groupId !== null && groupId !== undefined)));
+  for (const groupId of triedGroupIds) {
+    const tab = molecule.editor.getTabById(path, groupId);
+    if (!tab) continue;
+    return {
+      groupId,
+      tab
+    };
+  }
+  return null;
 }
 
 function syncEditorTabState(
@@ -1323,7 +1458,12 @@ function syncEditorTabState(
   const target = findEditorTabByPath(path, preferredGroupId);
   if (!target) return;
   const currentData = target.tab.data || {};
-  const nextValue = next.value ?? currentData.value ?? fileContentCache.get(path) ?? store.get().currentContent;
+  const docState = updateDocumentState(path, {
+    content: next.value ?? currentData.value ?? fileContentCache.get(path) ?? store.get().currentContent,
+    modified: next.modified,
+    groupId: preferredGroupId ?? target.groupId
+  });
+  const nextValue = docState?.content ?? currentData.value ?? fileContentCache.get(path) ?? store.get().currentContent;
   if (currentData.modified === next.modified && currentData.value === nextValue && target.tab.status === (next.modified ? "edited" : undefined)) {
     return;
   }
@@ -1379,36 +1519,77 @@ async function duplicateTreeEntry(path: string, type: "file" | "folder") {
   await refreshAllWithHints([...getAncestorPaths(path), ...getAncestorPaths(finalPath)], finalPath);
 }
 
-function updateTabValue(path: string, value: string, modified: boolean, groupId?: string) {
+function updateTabValue(path: string, value: string, modified: boolean, groupId?: string | number) {
   syncEditorTabState(path, { value, modified }, groupId);
 }
 
-function markTabEdited(path: string, groupId?: string) {
-  const latestValue = fileContentCache.get(path) ?? store.get().currentContent;
+function markTabEdited(path: string, groupId?: string | number) {
+  const latestValue = getDocumentState(path)?.content ?? fileContentCache.get(path) ?? store.get().currentContent;
   syncEditorTabState(path, { value: latestValue, modified: true }, groupId);
+}
+
+function setActiveTab(path: string, groupId?: string | number, content?: string) {
+  if (!path) return;
+  if (groupId !== undefined || typeof content === "string") {
+    updateDocumentState(path, { groupId, content });
+  }
+  activeTabPath = path;
+  activeTabGroupId = groupId;
+  store.set({
+    currentPath: path,
+    currentContent: content ?? getDocumentState(path)?.content ?? fileContentCache.get(path) ?? store.get().currentContent
+  });
+}
+
+function bindEditorToPath(path: string, editor: MonacoEditorNS.IStandaloneCodeEditor) {
+  if (!path) return;
+  Array.from(editorInstanceByPath.entries()).forEach(([mappedPath, mappedEditor]) => {
+    if (mappedEditor === editor && mappedPath !== path) {
+      editorInstanceByPath.delete(mappedPath);
+    }
+  });
+  editorInstanceByPath.set(path, editor);
 }
 
 function setActiveEditor(path: string, editor: MonacoEditorNS.IStandaloneCodeEditor) {
   if (!path) return;
+  bindEditorToPath(path, editor);
   activeEditorInstance = editor;
   activeEditorPath = path;
 }
 
-function getCurrentEditorInstance() {
-  const currentPath = store.get().currentPath;
-  if (activeEditorInstance && activeEditorPath === currentPath) {
+function getCurrentEditorInstance(expectedPath = store.get().currentPath) {
+  if (activeEditorInstance && activeEditorPath === expectedPath) {
     return activeEditorInstance;
   }
-  return molecule.editor.editorInstance || activeEditorInstance;
+  const moleculeEditor = molecule.editor.editorInstance;
+  if (moleculeEditor && getActiveTabPath() === expectedPath) {
+    return moleculeEditor;
+  }
+  return null;
 }
 
 function getActiveTabPath() {
-  const current = molecule.editor.getState().current;
-  return current?.tab?.data?.path || store.get().currentPath;
+  return activeTabPath || store.get().currentPath;
 }
 
-function getCurrentEditorValue() {
-  return getCurrentEditorInstance()?.getValue() ?? store.get().currentContent;
+function getCurrentEditorValue(expectedPath = store.get().currentPath) {
+  const boundEditor = editorInstanceByPath.get(expectedPath);
+  if (boundEditor) {
+    return boundEditor.getValue();
+  }
+  const docState = getDocumentState(expectedPath);
+  if (docState) {
+    return docState.content;
+  }
+  const activeTab = getActiveTabSnapshot();
+  if (activeTab.path === expectedPath && typeof activeTab.value === "string") {
+    return activeTab.value;
+  }
+  if (expectedPath === store.get().currentPath) {
+    return getCurrentEditorInstance(expectedPath)?.getValue() ?? store.get().currentContent;
+  }
+  return getCurrentEditorInstance(expectedPath)?.getValue() ?? fileContentCache.get(expectedPath) ?? "";
 }
 
 function attachCustomEditorContextMenu(editor: MonacoEditorNS.IStandaloneCodeEditor) {
@@ -1462,6 +1643,16 @@ function registerEditorCommands(editor: MonacoEditorNS.IStandaloneCodeEditor) {
 // 部分(菜单栏/状态栏/预览区等)保持浏览器默认右键行为。
 function bindExplorerContextMenu() {
   const handler = (event: MouseEvent) => {
+    const target = resolveExplorerContextTargetFromEvent(event);
+    explorerContextTarget = target.path ? target : null;
+    if (target.path) {
+      store.set({
+        treeContextPath: target.path,
+        treeContextType: target.type || ""
+      });
+      const book = detectBookFromPath(target.path);
+      if (book) syncBook(book);
+    }
     event.preventDefault();
     event.stopPropagation();
     window.setTimeout(() => {
@@ -1481,6 +1672,9 @@ function bindExplorerSelectionSync() {
     if (!target?.closest(".mo-sidebar, .mo-folderTree, .mo-tree, [data-content='sidebar.explore.folders']")) return;
     window.setTimeout(() => {
       const preferred = getPreferredCreationTarget();
+      explorerContextTarget = preferred.path
+        ? { path: preferred.path, type: preferred.type }
+        : null;
       const book = detectBookFromPath(preferred.path);
       if (book) syncBook(book);
     }, 0);
@@ -1497,7 +1691,7 @@ function openExplorerContextMenu(x: number, y: number) {
   menu.style.left = `${x}px`;
   menu.style.top = `${y}px`;
 
-  const target = getPreferredCreationTarget();
+  const target = explorerContextTarget || getPreferredCreationTarget();
   const items = buildExplorerContextItems(target.path, target.type);
 
   items.forEach((item) => {
@@ -1540,6 +1734,33 @@ function buildExplorerContextItems(path: string, type?: "file" | "folder") {
   }
   items.push({ label: "刷新", action: () => refreshAll() });
   return items;
+}
+
+function resolveExplorerContextTargetFromEvent(event: MouseEvent): { path: string; type?: "file" | "folder" } {
+  const element = (event.target as HTMLElement | null)?.closest("[data-key]") as HTMLElement | null;
+  const rawKey = element?.dataset.key || "";
+  if (!rawKey || rawKey === "source_root") {
+    return { path: "", type: undefined };
+  }
+  const node = findTreeNodeByPath(rawKey, currentTree);
+  if (!node) {
+    return { path: rawKey, type: undefined };
+  }
+  return {
+    path: node.path,
+    type: node.type === "folder" ? "folder" : "file"
+  };
+}
+
+function findTreeNodeByPath(path: string, nodes: TreeNode[]): TreeNode | null {
+  for (const node of nodes) {
+    if (node.path === path) return node;
+    if (node.children?.length) {
+      const child = findTreeNodeByPath(path, node.children);
+      if (child) return child;
+    }
+  }
+  return null;
 }
 
 function isImagePath(path: string) {
@@ -1953,6 +2174,8 @@ function applyWorkbenchSettings(raw: string) {
 
 function markCurrentTabSaved(content: string) {
   const currentPath = getActiveTabPath();
+  if (!currentPath) return;
+  updateDocumentState(currentPath, { content, modified: false, groupId: activeTabGroupId });
   store.set({ currentContent: content });
   fileContentCache.set(currentPath, content);
   syncEditorTabState(currentPath, { value: content, modified: false });
@@ -2059,8 +2282,8 @@ async function refreshAllWithHints(extraPaths: string[] = [], activePath = "") {
   }
 }
 
-function detectBookFromPath(path: string) {
-  const cleaned = path.replace(/^\/+/, "");
+function detectBookFromPath(path?: string) {
+  const cleaned = String(path || "").replace(/^\/+/, "");
   const match = cleaned.match(/^(book_[^/]+)/);
   return match?.[1] || "";
 }
@@ -2093,7 +2316,17 @@ function joinPath(base: string, leaf: string) {
 }
 
 function isChildPath(parent: string, child: string) {
+  if (!parent || !child) return false;
   return child.startsWith(`${parent.replace(/\/+$/g, "")}/`);
+}
+
+function replacePathPrefix(value: string | undefined, sourcePath: string, nextPath: string) {
+  if (!value) return "";
+  if (value === sourcePath) return nextPath;
+  if (isChildPath(sourcePath, value)) {
+    return value.replace(sourcePath, nextPath);
+  }
+  return value;
 }
 
 function getPreferredCreationTarget() {
@@ -2145,24 +2378,26 @@ function resolveRenamedPath(currentPath: string, nextValue: string) {
 
 function syncPathRename(sourcePath: string, nextPath: string) {
   renameFileCachePath(sourcePath, nextPath);
+  renameOpenTabsPath(sourcePath, nextPath);
   const state = store.get();
   const nextStorePatch: Partial<AppState> = {};
-  if (state.currentPath === sourcePath || isChildPath(sourcePath, state.currentPath)) {
-    nextStorePatch.currentPath = state.currentPath.replace(sourcePath, nextPath);
-  }
-  if (state.treeContextPath === sourcePath || isChildPath(sourcePath, state.treeContextPath)) {
-    nextStorePatch.treeContextPath = state.treeContextPath.replace(sourcePath, nextPath);
-  }
+  const renamedCurrentPath = replacePathPrefix(state.currentPath, sourcePath, nextPath);
+  const renamedTreeContextPath = replacePathPrefix(state.treeContextPath, sourcePath, nextPath);
+  if (renamedCurrentPath && renamedCurrentPath !== state.currentPath) nextStorePatch.currentPath = renamedCurrentPath;
+  if (renamedTreeContextPath && renamedTreeContextPath !== state.treeContextPath) nextStorePatch.treeContextPath = renamedTreeContextPath;
   if (Object.keys(nextStorePatch).length) {
     store.set(nextStorePatch);
   }
-  if (activeEditorPath === sourcePath || isChildPath(sourcePath, activeEditorPath)) {
-    activeEditorPath = activeEditorPath.replace(sourcePath, nextPath);
-  }
+  activeEditorPath = replacePathPrefix(activeEditorPath, sourcePath, nextPath);
 }
 
 function cleanupDeletedPath(path: string) {
   removeFileCachePath(path);
+  Array.from(documentStateByPath.keys()).forEach((key) => {
+    if (key === path || isChildPath(path, key)) {
+      documentStateByPath.delete(key);
+    }
+  });
   closeTabsByPath(path);
   const state = store.get();
   const parentPath = dirname(path);
@@ -2188,6 +2423,11 @@ function renameFileCachePath(sourcePath: string, nextPath: string) {
     if (key !== sourcePath && !isChildPath(sourcePath, key)) return;
     fileContentCache.delete(key);
     fileContentCache.set(key.replace(sourcePath, nextPath), value);
+  });
+  Array.from(documentStateByPath.entries()).forEach(([key, value]) => {
+    if (key !== sourcePath && !isChildPath(sourcePath, key)) return;
+    documentStateByPath.delete(key);
+    documentStateByPath.set(key.replace(sourcePath, nextPath), value);
   });
 }
 
