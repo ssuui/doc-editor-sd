@@ -132,6 +132,7 @@ func (s *Service) BuildBook(sourceRoot string, bookDir string) (string, error) {
 	if err := s.prepareMarkdownTree(filepath.Join(buildSource, "content"), markdownPrepOptions{
 		RootTitle:       bookMeta.DisplayName,
 		RootCascadeDocs: true,
+		ForceDocsType:   true,
 		SidebarOrder:    bookMeta.SidebarOrder,
 	}); err != nil {
 		return "", err
@@ -424,6 +425,7 @@ func booksPageSectionPath(configPath string) string {
 type markdownPrepOptions struct {
 	RootTitle       string
 	RootCascadeDocs bool
+	ForceDocsType   bool
 	RootHasCards    bool
 	SidebarOrder    []string
 }
@@ -533,6 +535,9 @@ func normalizeMarkdown(raw []byte, rel string, opts markdownPrepOptions, weight 
 	if hasWeight {
 		frontMatter = append(frontMatter, fmt.Sprintf("weight: %d", weight))
 	}
+	if opts.ForceDocsType {
+		frontMatter = append(frontMatter, "type: docs")
+	}
 	if rel == "_index.md" && opts.RootCascadeDocs {
 		frontMatter = append(frontMatter, "cascade:")
 		frontMatter = append(frontMatter, "  type: docs")
@@ -575,6 +580,9 @@ func normalizeYAMLFrontMatter(text string, rel string, opts markdownPrepOptions,
 	}
 	if hasWeight {
 		data["weight"] = weight
+	}
+	if opts.ForceDocsType {
+		data["type"] = "docs"
 	}
 	if rel == "_index.md" && opts.RootCascadeDocs {
 		ensureCascadeDocs(data)
@@ -654,9 +662,17 @@ func buildSidebarWeights(files []string, sidebarOrder []string) map[string]int {
 		}
 	}
 	defaultStart := (len(sidebarOrder) + 1) * 10
-	for _, rels := range groups {
+	for group, rels := range groups {
 		sort.Strings(rels)
 		nextWeight := defaultStart
+		if group != "." {
+			sectionIndex := filepath.ToSlash(filepath.Join(group, "_index.md"))
+			if sectionWeight, ok := configured[sectionIndex]; ok {
+				nextWeight = sectionWeight + 1
+			} else if sectionWeight, ok := inferredSections[sectionIndex]; ok {
+				nextWeight = sectionWeight + 1
+			}
+		}
 		for _, rel := range rels {
 			if configuredWeight, ok := configured[rel]; ok {
 				weights[rel] = configuredWeight

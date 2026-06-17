@@ -66,6 +66,88 @@ func TestBuildSidebarWeightsPromotesSectionsFromConfiguredChildren(t *testing.T)
 	}
 }
 
+func TestBuildSidebarWeightsAlignsLeafPagesWithSectionOrder(t *testing.T) {
+	files := []string{
+		"_index.md",
+		"02-review/_index.md",
+		"02-review/checklist.md",
+		"01-setup/_index.md",
+		"01-setup/start.md",
+		"03-flow/_index.md",
+		"03-flow/commit.md",
+	}
+
+	weights := buildSidebarWeights(files, []string{
+		"02-review",
+		"01-setup",
+	})
+
+	if weights["02-review/checklist.md"] >= weights["01-setup/start.md"] {
+		t.Fatalf("expected first configured section child to sort before second section child, got %d >= %d", weights["02-review/checklist.md"], weights["01-setup/start.md"])
+	}
+	if weights["01-setup/start.md"] >= weights["03-flow/commit.md"] {
+		t.Fatalf("expected configured section child to sort before default section child, got %d >= %d", weights["01-setup/start.md"], weights["03-flow/commit.md"])
+	}
+}
+
+func TestPrepareMarkdownTreeAssignsLeafWeightsFromSidebarOrder(t *testing.T) {
+	contentDir := t.TempDir()
+	files := map[string]string{
+		"_index.md":                    "---\ntitle: 根\n---\n",
+		"02-review/_index.md":         "---\ntitle: 评审\n---\n",
+		"02-review/checklist.md":      "# 评审清单\n",
+		"01-setup/_index.md":          "---\ntitle: 环境\n---\n",
+		"01-setup/start.md":           "# 本地启动\n",
+		"03-flow/_index.md":           "---\ntitle: 流程\n---\n",
+		"03-flow/commit.md":           "# 提交流程\n",
+	}
+	for rel, content := range files {
+		path := filepath.Join(contentDir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	svc := &Service{}
+	if err := svc.prepareMarkdownTree(contentDir, markdownPrepOptions{
+		RootTitle:       "示例书本",
+		RootCascadeDocs: true,
+		ForceDocsType:   true,
+		SidebarOrder:    []string{"02-review", "01-setup"},
+	}); err != nil {
+		t.Fatalf("prepareMarkdownTree failed: %v", err)
+	}
+
+	checklistRaw, err := os.ReadFile(filepath.Join(contentDir, "02-review", "checklist.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	startRaw, err := os.ReadFile(filepath.Join(contentDir, "01-setup", "start.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitRaw, err := os.ReadFile(filepath.Join(contentDir, "03-flow", "commit.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	checklistText := string(checklistRaw)
+	startText := string(startRaw)
+	commitText := string(commitRaw)
+	if !strings.Contains(checklistText, "weight: 11") {
+		t.Fatalf("expected first configured section leaf to inherit early weight, got:\n%s", checklistText)
+	}
+	if !strings.Contains(startText, "weight: 21") {
+		t.Fatalf("expected second configured section leaf to follow next, got:\n%s", startText)
+	}
+	if !strings.Contains(commitText, "weight: 30") {
+		t.Fatalf("expected default section leaf to follow configured sections, got:\n%s", commitText)
+	}
+}
+
 func TestAncestorSectionIndexes(t *testing.T) {
 	got := ancestorSectionIndexes("guide/setup/install.md")
 	want := []string{"guide/setup/_index.md", "guide/_index.md"}
@@ -108,15 +190,15 @@ func TestEnsureSectionIndexFilesCreatesMissingIndexes(t *testing.T) {
 
 func TestGenerateBooksPageHidesRenderedTitle(t *testing.T) {
 	sourceRoot := t.TempDir()
-	booksMeta := []byte("book_list:\n  - book_dir_name: book-a\n    weight: 10\n")
+	booksMeta := []byte("book_list:\n  - book_dir_name: b-a\n    weight: 10\n")
 	if err := os.WriteFile(filepath.Join(sourceRoot, "_books_meta.yaml"), booksMeta, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(sourceRoot, "book-a"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(sourceRoot, "b-a"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	bookMeta := []byte("display_name: 示例文档\ndescription: 说明\nversion: v1\n")
-	if err := os.WriteFile(filepath.Join(sourceRoot, "book-a", "book_meta.yaml"), bookMeta, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(sourceRoot, "b-a", "book_meta.yaml"), bookMeta, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
