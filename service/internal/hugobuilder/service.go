@@ -296,6 +296,24 @@ func (s *Service) booksPageTitle() string {
 	return "全部书籍"
 }
 
+func (s *Service) siteLogoPath() string {
+	if strings.TrimSpace(s.siteCfg.SiteLogo) != "" {
+		return strings.TrimSpace(s.siteCfg.SiteLogo)
+	}
+	return "/global_static/logo.svg"
+}
+
+func (s *Service) mainSiteURL() string {
+	domain := strings.TrimSpace(s.cfg.S3.SitePublicDomain)
+	if domain == "" {
+		return "/"
+	}
+	if strings.HasPrefix(domain, "http://") || strings.HasPrefix(domain, "https://") {
+		return strings.TrimRight(domain, "/") + "/"
+	}
+	return "https://" + strings.TrimRight(domain, "/") + "/"
+}
+
 func booksPageSectionPath(configPath string) string {
 	cleaned := strings.TrimSpace(configPath)
 	cleaned = strings.Trim(cleaned, "/")
@@ -451,7 +469,7 @@ displayLogo = true
 width = "wide"
 
 [params.navbar.logo]
-path = "global_static/logo.svg"
+path = %q
 link = "/"
 
 [params.footer]
@@ -475,11 +493,18 @@ type = "flexsearch"
 [params.page]
 width = "wide"
 
-%s`, s.siteCfg.SiteTitle, s.siteCfg.FooterText, s.siteCfg.FooterText, s.siteCfg.ICP.Number, s.siteCfg.ICP.Link, s.siteCfg.FooterCopyright, strings.Join(nav, "\n")))
+%s`, s.siteCfg.SiteTitle, s.siteCfg.FooterText, s.siteLogoPath(), s.siteCfg.FooterText, s.siteCfg.ICP.Number, s.siteCfg.ICP.Link, s.siteCfg.FooterCopyright, strings.Join(nav, "\n")))
 }
 
 func (s *Service) buildBookConfig(bookDir string, meta *configloader.BookMeta) string {
 	menuBlocks := []string{
+		strings.Join([]string{
+			"[[menu.main]]",
+			`name = "主站"`,
+			fmt.Sprintf("url = %q", s.mainSiteURL()),
+			"weight = 1",
+			"",
+		}, "\n"),
 		strings.Join([]string{
 			"[[menu.main]]",
 			`name = "搜索"`,
