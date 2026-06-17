@@ -20,8 +20,20 @@
   {{- end -}}
 {{- end -}}
 
-<aside class="hextra-sidebar-container hx:flex hx:flex-col hx:print:hidden hx:md:top-[var(--hextra-navbar-height)] hx:md:shrink-0 hx:md:w-64 hx:md:self-start hx:max-md:[transform:translate3d(0,-100%,0)] {{ $sidebarClass }}">
+<div class="hextra-mobile-sidebar-overlay hx:hidden hx:md:hidden" aria-hidden="true"></div>
+<aside class="hextra-sidebar-container hx:flex hx:flex-col hx:print:hidden hx:md:top-[var(--hextra-navbar-height)] hx:md:shrink-0 hx:md:w-64 hx:md:self-start hx:max-md:[transform:translate3d(-100%,0,0)] {{ $sidebarClass }}">
   <div class="hextra-scrollbar hx:overflow-y-auto hx:overflow-x-hidden hx:p-4 hx:grow hx:md:h-[calc(100vh-var(--hextra-navbar-height)-var(--menu-height))]">
+    <div class="hx:mb-3 hx:flex hx:items-center hx:justify-between hx:gap-3 hx:md:hidden">
+      <span class="hx:text-sm hx:font-semibold hx:text-gray-900 hx:dark:text-gray-100">目录</span>
+      <button
+        type="button"
+        class="hextra-mobile-sidebar-close hx:inline-flex hx:h-9 hx:w-9 hx:items-center hx:justify-center hx:rounded-md hx:text-gray-500 hx:transition-colors hx:hover:bg-gray-100 hx:hover:text-gray-900 hx:dark:text-neutral-400 hx:dark:hover:bg-neutral-800 hx:dark:hover:text-gray-100"
+        aria-label="关闭目录"
+        title="关闭目录"
+      >
+        {{- partial "utils/icon.html" (dict "name" "arrow-left" "attributes" "class=\"hx:h-5 hx:w-5\"") -}}
+      </button>
+    </div>
     <ul class="hx:flex hx:flex-col hx:gap-1 hx:md:hidden">
       <!-- Nav -->
       {{ template "sidebar-main" (dict "context" site.Home "pageURL" $pageURL "page" $context "toc" true) -}}
@@ -334,6 +346,57 @@
 
 <script>
   document.addEventListener("DOMContentLoaded", function () {
+    const mobileSidebarToggleButtons = document.querySelectorAll(".hextra-mobile-sidebar-toggle");
+    const mobileSidebarCloseButtons = document.querySelectorAll(".hextra-mobile-sidebar-close");
+    const hamburgerMenu = document.querySelector(".hextra-hamburger-menu");
+    const mobileSidebarOverlay = document.querySelector(".hextra-mobile-sidebar-overlay");
+    const mobileQuery = window.matchMedia("(max-width: 767px)");
+
+    const syncMobileSidebarState = function () {
+      if (!hamburgerMenu || !mobileSidebarOverlay) {
+        return;
+      }
+
+      const isOpen = hamburgerMenu.getAttribute("aria-expanded") === "true";
+      mobileSidebarOverlay.classList.toggle("hx:hidden", !isOpen || !mobileQuery.matches);
+      mobileSidebarOverlay.setAttribute("aria-hidden", isOpen && mobileQuery.matches ? "false" : "true");
+    };
+
+    mobileSidebarToggleButtons.forEach(function (button) {
+      button.addEventListener("click", function () {
+        if (hamburgerMenu) {
+          hamburgerMenu.click();
+        }
+      });
+    });
+
+    mobileSidebarCloseButtons.forEach(function (button) {
+      button.addEventListener("click", function () {
+        if (hamburgerMenu && hamburgerMenu.getAttribute("aria-expanded") === "true") {
+          hamburgerMenu.click();
+        }
+      });
+    });
+
+    if (mobileSidebarOverlay) {
+      mobileSidebarOverlay.addEventListener("click", function () {
+        if (hamburgerMenu && hamburgerMenu.getAttribute("aria-expanded") === "true") {
+          hamburgerMenu.click();
+        }
+      });
+    }
+
+    if (hamburgerMenu) {
+      hamburgerMenu.addEventListener("click", function () {
+        window.requestAnimationFrame(syncMobileSidebarState);
+      });
+    }
+
+    if (mobileQuery.addEventListener) {
+      mobileQuery.addEventListener("change", syncMobileSidebarState);
+    }
+    syncMobileSidebarState();
+
     const triggers = document.querySelectorAll(".hextra-sidebar-section-trigger");
     triggers.forEach(function (trigger) {
       trigger.addEventListener("click", function (e) {

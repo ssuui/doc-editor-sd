@@ -19,3 +19,24 @@
 .hextra-sidebar-active-item {
   font-weight: 600;
 }
+
+@media (max-width: 48rem) {
+  .hextra-mobile-sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 14;
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(2px);
+  }
+
+  .hextra-sidebar-container {
+    width: min(20rem, calc(100vw - 3rem));
+    max-width: calc(100vw - 3rem);
+    z-index: 15;
+    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+  }
+
+  .dark .hextra-sidebar-container {
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  }
+}
