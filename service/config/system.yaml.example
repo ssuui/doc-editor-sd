@@ -8,13 +8,13 @@ temp_clean_interval: 24
 build_task_timeout: 300
 auth:
   admin_username: "admin"
-  admin_password: "change-me"
+  admin_password: "AtlasDocs_2026!"
   token_expire_hours: 360
 s3:
   endpoint: "https://cos.ap-guangzhou.myqcloud.com"
   access_key_id: "AKIDEXAMPLE8Q2M4N7R1T"
   secret_access_key: "exampleSecretKey9kLm2Qv7Px4Hs8Yz"
-  default_bucket_name: "your-bucket-name"
+  default_bucket_name: "atlas-doc-portal-1300012345"
   region: "ap-guangzhou"
   site_public_domain: "docs.atlaslab.example"
   img_cdn_domain: "assets.atlaslab.example"

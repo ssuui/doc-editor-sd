@@ -95,9 +95,35 @@ if [ "${ready}" -ne 1 ]; then
   exit 1
 fi
 
+login_payload="$(python3 - <<'PY'
+from pathlib import Path
+import json
+
+text = Path("config/system.yaml").read_text(encoding="utf-8")
+username = "admin"
+password = ""
+in_auth = False
+for raw in text.splitlines():
+    line = raw.rstrip()
+    if not line or line.lstrip().startswith("#"):
+        continue
+    if not line.startswith(" ") and line.endswith(":"):
+        in_auth = line.strip() == "auth:"
+        continue
+    if not in_auth:
+        continue
+    stripped = line.strip()
+    if stripped.startswith("admin_username:"):
+        username = stripped.split(":", 1)[1].strip().strip('"')
+    if stripped.startswith("admin_password:"):
+        password = stripped.split(":", 1)[1].strip().strip('"')
+
+print(json.dumps({"username": username, "password": password}, ensure_ascii=False))
+PY
+)"
 login_resp="$(curl -fsS -X POST "http://127.0.0.1:${PORT}/api/login" \
   -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"AtlasDocs_2026!"}')"
+  -d "${login_payload}")"
 token="$(printf '%s' "${login_resp}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["token"])')"
 printf '%s' "${token}" > "${TOKEN_FILE}"
 

@@ -1,11 +1,11 @@
-site_title: "碎碎的知识库"
+site_title: "AtlasLab 知识库"
 site_logo: "/global_static/logo.png"
-footer_text: "欢迎来到小站"
+footer_text: "AtlasLab 文档中心"
 footer_copyright: ""
 icp:
-  number: "粤ICP备16050855号"
+  number: "京ICP备2026001234号-1"
   link: "https://beian.miit.gov.cn/"
-home_notice_text: "当前站点正在改版。请见谅！"
+home_notice_text: "当前为演示模板站点，内容与域名均为示例数据。"
 books_page_path: "/books/"
 books_page_title: "全部书籍"
 home_card_layout:
@@ -13,9 +13,9 @@ home_card_layout:
   show_book_desc: true
   show_version_tag: true
 global_nav:
-  - name: "门户首页"
+  - name: "首页"
     link: "/"
-  - name: "全部书籍"
+  - name: "资料总览"
     link: "/books/index.html"
 custom_global_css: ""
 enable_sitemap: true
