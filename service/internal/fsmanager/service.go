@@ -242,8 +242,8 @@ func (s *Service) scanTree(rel string) ([]Node, error) {
 	return nodes, nil
 }
 
-func ListBooks(metaPath string) ([]configloader.SiteBookItem, error) {
-	meta, err := configloader.LoadSiteMeta(metaPath)
+func ListBooks(metaPath string) ([]configloader.BooksBookItem, error) {
+	meta, err := configloader.LoadBooksMeta(metaPath)
 	if err != nil {
 		return nil, err
 	}
@@ -252,46 +252,46 @@ func ListBooks(metaPath string) ([]configloader.SiteBookItem, error) {
 }
 
 func (s *Service) RebuildSiteMeta() ([]configloader.SiteBookItem, error) {
-	entries, err := os.ReadDir(s.root)
+	books, err := s.scanBooks()
 	if err != nil {
 		return nil, err
 	}
-	books := make([]configloader.SiteBookItem, 0, len(entries))
+	items := make([]configloader.SiteBookItem, 0, len(books))
 	weight := 10
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if !strings.HasPrefix(name, "book_") {
-			continue
-		}
-		bookMetaPath := filepath.Join(s.root, name, "book_meta.yaml")
-		if _, err := os.Stat(bookMetaPath); err != nil {
-			continue
-		}
-		meta, err := configloader.LoadBookMeta(bookMetaPath)
-		if err != nil {
-			continue
-		}
-		books = append(books, configloader.SiteBookItem{
-			BookDirName:    name,
+	for _, book := range books {
+		items = append(items, configloader.SiteBookItem{
+			BookDirName:    book.dirName,
 			Weight:         weight,
-			EnableHomeShow: meta.VisibleInHome,
+			EnableHomeShow: book.meta.VisibleInHome,
 		})
 		weight += 10
 	}
-	sort.Slice(books, func(i, j int) bool {
-		if books[i].Weight == books[j].Weight {
-			return books[i].BookDirName < books[j].BookDirName
-		}
-		return books[i].Weight < books[j].Weight
-	})
-	meta := &configloader.SiteMeta{BookList: books}
+	meta := &configloader.SiteMeta{BookList: items}
 	if err := configloader.SaveYAML(filepath.Join(s.root, "_site_meta.yaml"), meta); err != nil {
 		return nil, err
 	}
-	return books, nil
+	return items, nil
+}
+
+func (s *Service) RebuildBooksMeta() ([]configloader.BooksBookItem, error) {
+	books, err := s.scanBooks()
+	if err != nil {
+		return nil, err
+	}
+	items := make([]configloader.BooksBookItem, 0, len(books))
+	weight := 10
+	for _, book := range books {
+		items = append(items, configloader.BooksBookItem{
+			BookDirName: book.dirName,
+			Weight:      weight,
+		})
+		weight += 10
+	}
+	meta := &configloader.BooksMeta{BookList: items}
+	if err := configloader.SaveYAML(filepath.Join(s.root, "_books_meta.yaml"), meta); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func IsNotExist(err error) bool {
@@ -378,4 +378,42 @@ func copyDir(source string, target string) error {
 		}
 		return copyFile(path, dest)
 	})
+}
+
+type scannedBook struct {
+	dirName string
+	meta    *configloader.BookMeta
+}
+
+func (s *Service) scanBooks() ([]scannedBook, error) {
+	entries, err := os.ReadDir(s.root)
+	if err != nil {
+		return nil, err
+	}
+	books := make([]scannedBook, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasPrefix(name, "book_") {
+			continue
+		}
+		bookMetaPath := filepath.Join(s.root, name, "book_meta.yaml")
+		if _, err := os.Stat(bookMetaPath); err != nil {
+			continue
+		}
+		meta, err := configloader.LoadBookMeta(bookMetaPath)
+		if err != nil {
+			continue
+		}
+		books = append(books, scannedBook{
+			dirName: name,
+			meta:    meta,
+		})
+	}
+	sort.Slice(books, func(i, j int) bool {
+		return books[i].dirName < books[j].dirName
+	})
+	return books, nil
 }

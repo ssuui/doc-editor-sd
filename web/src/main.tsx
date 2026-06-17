@@ -20,7 +20,8 @@ import { request } from "./request/client";
 import "./styles.css";
 
 type TreeNode = { name: string; path: string; type: "file" | "folder"; children?: TreeNode[] };
-type BookItem = { book_dir_name: string; weight: number; enable_home_show: boolean };
+type BookItem = { book_dir_name: string; weight: number };
+type HomeBookItem = { book_dir_name: string; weight: number; enable_home_show: boolean };
 type TaskInfo = { id: string; status: string; result_url: string; error_msg: string; done: boolean };
 
 type DialogState =
@@ -111,7 +112,8 @@ const EXPLORER_UPLOAD_ID = "custom.upload";
 const GLOBAL_LOGOUT_ID = "global.menu.logout";
 const GLOBAL_SETTINGS_ID = "global.menu.settings.custom";
 const ACTIVITY_TOGGLE_PANEL_ID = "cms.activity.togglePanel";
-const ACTIVITY_REBUILD_META_ID = "cms.activity.rebuildMeta";
+const ACTIVITY_REBUILD_HOME_META_ID = "cms.activity.rebuildHomeMeta";
+const ACTIVITY_REBUILD_BOOKS_META_ID = "cms.activity.rebuildBooksMeta";
 const ACTION_QUICK_COMMAND = "editor.action.quickCommand";
 const ACTION_QUICK_ACCESS_SETTINGS = "workbench.action.quickAccessSettings";
 const ACTION_SELECT_THEME = "workbench.action.selectTheme";
@@ -681,10 +683,17 @@ function setupActivityBar() {
       type: "global"
     },
     {
-      id: ACTIVITY_REBUILD_META_ID,
-      name: "重建目录",
+      id: ACTIVITY_REBUILD_HOME_META_ID,
+      name: "首页推荐",
       title: "扫描书籍目录并重建 _site_meta.yaml",
       icon: "repo",
+      type: "global"
+    },
+    {
+      id: ACTIVITY_REBUILD_BOOKS_META_ID,
+      name: "书籍列表",
+      title: "扫描书籍目录并重建 _books_meta.yaml",
+      icon: "library",
       type: "global"
     },
     {
@@ -708,8 +717,11 @@ function setupActivityBar() {
     if (selectedKey === ACTIVITY_TOGGLE_PANEL_ID) {
       toggleBottomPanel();
     }
-    if (selectedKey === ACTIVITY_REBUILD_META_ID) {
+    if (selectedKey === ACTIVITY_REBUILD_HOME_META_ID) {
       void rebuildSiteMeta();
+    }
+    if (selectedKey === ACTIVITY_REBUILD_BOOKS_META_ID) {
+      void rebuildBooksMeta();
     }
     if (selectedKey === GLOBAL_LOGOUT_ID) {
       openLogoutDialog();
@@ -862,11 +874,22 @@ function toggleBottomPanel() {
 }
 
 async function rebuildSiteMeta() {
-  const books = await request<BookItem[]>("/api/fs/site/rebuild-meta", { method: "POST" });
+  const books = await request<HomeBookItem[]>("/api/fs/site/rebuild-meta", { method: "POST" });
   const labels = books.map((book) => `${book.book_dir_name}(${book.enable_home_show ? "首页显示" : "仅目录"})`);
   molecule.notification.add([{
     id: `rebuild-meta-${Date.now()}`,
     value: labels.length ? `已重建 _site_meta.yaml：${labels.join("，")}` : "已重建 _site_meta.yaml，但当前未扫描到书籍目录",
+    status: NotificationStatus.WaitRead
+  }]);
+  await refreshAll();
+}
+
+async function rebuildBooksMeta() {
+  const books = await request<BookItem[]>("/api/fs/site/rebuild-books-meta", { method: "POST" });
+  const labels = books.map((book) => `${book.book_dir_name}(排序 ${book.weight})`);
+  molecule.notification.add([{
+    id: `rebuild-books-meta-${Date.now()}`,
+    value: labels.length ? `已重建 _books_meta.yaml：${labels.join("，")}` : "已重建 _books_meta.yaml，但当前未扫描到书籍目录",
     status: NotificationStatus.WaitRead
   }]);
   await refreshAll();

@@ -90,6 +90,15 @@ type SiteBookItem struct {
 	EnableHomeShow bool   `yaml:"enable_home_show"`
 }
 
+type BooksMeta struct {
+	BookList []BooksBookItem `yaml:"book_list"`
+}
+
+type BooksBookItem struct {
+	BookDirName string `yaml:"book_dir_name"`
+	Weight      int    `yaml:"weight"`
+}
+
 type BookMeta struct {
 	DisplayName   string        `yaml:"display_name"`
 	CoverImg      string        `yaml:"cover_img"`
@@ -198,6 +207,29 @@ func LoadSiteMeta(path string) (*SiteMeta, error) {
 	meta := &SiteMeta{}
 	if err := loadYAML(path, meta); err != nil {
 		return nil, err
+	}
+	return meta, nil
+}
+
+func LoadBooksMeta(path string) (*BooksMeta, error) {
+	meta := &BooksMeta{}
+	if err := loadYAML(path, meta); err == nil {
+		return meta, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+
+	siteMeta, err := LoadSiteMeta(filepath.Join(filepath.Dir(path), "_site_meta.yaml"))
+	if err != nil {
+		return nil, err
+	}
+
+	meta.BookList = make([]BooksBookItem, 0, len(siteMeta.BookList))
+	for _, item := range siteMeta.BookList {
+		meta.BookList = append(meta.BookList, BooksBookItem{
+			BookDirName: item.BookDirName,
+			Weight:      item.Weight,
+		})
 	}
 	return meta, nil
 }

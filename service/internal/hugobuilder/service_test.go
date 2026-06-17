@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"doc-publish-server/internal/configloader"
 )
 
 func TestNormalizeYAMLFrontMatterUsesBodyH1AsTitle(t *testing.T) {
@@ -101,5 +103,36 @@ func TestEnsureSectionIndexFilesCreatesMissingIndexes(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(sectionDir, "nested", "_index.md")); err != nil {
 		t.Fatalf("expected nested directory to receive _index.md: %v", err)
+	}
+}
+
+func TestGenerateBooksPageHidesRenderedTitle(t *testing.T) {
+	sourceRoot := t.TempDir()
+	booksMeta := []byte("book_list:\n  - book_dir_name: book-a\n    weight: 10\n")
+	if err := os.WriteFile(filepath.Join(sourceRoot, "_books_meta.yaml"), booksMeta, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(sourceRoot, "book-a"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bookMeta := []byte("display_name: 示例文档\ndescription: 说明\nversion: v1\n")
+	if err := os.WriteFile(filepath.Join(sourceRoot, "book-a", "book_meta.yaml"), bookMeta, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := &Service{siteCfg: &configloader.SiteGlobalConfig{}}
+	output, err := svc.generateBooksPage(sourceRoot, "全部书籍")
+	if err != nil {
+		t.Fatalf("generateBooksPage failed: %v", err)
+	}
+
+	if !strings.Contains(output, "hideTitle: true") {
+		t.Fatalf("expected generated page to hide rendered title, got:\n%s", output)
+	}
+	if strings.Contains(output, "# 全部书籍") {
+		t.Fatalf("expected generated page to avoid leading h1 duplication, got:\n%s", output)
+	}
+	if !strings.Contains(output, "books-page-search-input") {
+		t.Fatalf("expected generated books page to include a search box, got:\n%s", output)
 	}
 }

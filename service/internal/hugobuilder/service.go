@@ -223,22 +223,6 @@ func JoinLogs(parts ...string) string {
 }
 
 func (s *Service) generatePortalIndex(sourceRoot string) (string, error) {
-	return s.generateBookListPage(sourceRoot, s.siteCfg.SiteTitle, true)
-}
-
-func (s *Service) writeBooksPage(sourceRoot string, contentDir string) error {
-	booksDir := filepath.Join(contentDir, booksPageSectionPath(s.siteCfg.BooksPagePath))
-	if err := os.MkdirAll(booksDir, 0o755); err != nil {
-		return err
-	}
-	generated, err := s.generateBookListPage(sourceRoot, s.booksPageTitle(), false)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(booksDir, "_index.md"), []byte(generated), 0o644)
-}
-
-func (s *Service) generateBookListPage(sourceRoot string, title string, includeHomeNotice bool) (string, error) {
 	siteMeta, err := configloader.LoadSiteMeta(filepath.Join(sourceRoot, "_site_meta.yaml"))
 	if err != nil {
 		return "", err
@@ -246,8 +230,28 @@ func (s *Service) generateBookListPage(sourceRoot string, title string, includeH
 	sort.Slice(siteMeta.BookList, func(i, j int) bool {
 		return siteMeta.BookList[i].Weight < siteMeta.BookList[j].Weight
 	})
+	return s.generateHomePage(sourceRoot, siteMeta, s.siteCfg.SiteTitle, true)
+}
+
+func (s *Service) writeBooksPage(sourceRoot string, contentDir string) error {
+	booksDir := filepath.Join(contentDir, booksPageSectionPath(s.siteCfg.BooksPagePath))
+	if err := os.MkdirAll(booksDir, 0o755); err != nil {
+		return err
+	}
+	generated, err := s.generateBooksPage(sourceRoot, s.booksPageTitle())
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(booksDir, "_index.md"), []byte(generated), 0o644)
+}
+
+func (s *Service) generateHomePage(sourceRoot string, siteMeta *configloader.SiteMeta, title string, includeHomeNotice bool) (string, error) {
 	lines := []string{
-		"# " + title,
+		"---",
+		fmt.Sprintf("title: \"%s\"", escapeFrontMatterString(title)),
+		"params:",
+		"  hideTitle: true",
+		"---",
 		"",
 		"<div id=\"book-list\"></div>",
 		"",
@@ -291,11 +295,107 @@ func (s *Service) generateBookListPage(sourceRoot string, title string, includeH
 	return strings.Join(lines, "\n"), nil
 }
 
+func (s *Service) generateBooksPage(sourceRoot string, title string) (string, error) {
+	booksMeta, err := configloader.LoadBooksMeta(filepath.Join(sourceRoot, "_books_meta.yaml"))
+	if err != nil {
+		return "", err
+	}
+	sort.Slice(booksMeta.BookList, func(i, j int) bool {
+		return booksMeta.BookList[i].Weight < booksMeta.BookList[j].Weight
+	})
+
+	lines := []string{
+		"---",
+		fmt.Sprintf("title: \"%s\"", escapeFrontMatterString(title)),
+		"params:",
+		"  hideTitle: true",
+		"---",
+		"",
+		"## 文档总览",
+		"",
+		"<div class=\"books-page-search\">",
+		"  <label class=\"books-page-search__label\" for=\"books-page-search-input\">搜索书籍</label>",
+		"  <input id=\"books-page-search-input\" class=\"books-page-search__input\" type=\"search\" placeholder=\"输入书名、简介、标签或版本，快速定位文档\" autocomplete=\"off\" />",
+		"  <p id=\"books-page-search-status\" class=\"books-page-search__status\">共 0 本书</p>",
+		"</div>",
+		"",
+		"<div id=\"books-page-list\" class=\"books-page-list\">",
+	}
+
+	count := 0
+	for _, item := range booksMeta.BookList {
+		meta, err := configloader.LoadBookMeta(filepath.Join(sourceRoot, item.BookDirName, "book_meta.yaml"))
+		if err != nil {
+			return "", err
+		}
+		searchParts := []string{meta.DisplayName, meta.Description, meta.Version, item.BookDirName}
+		searchParts = append(searchParts, meta.Tags...)
+		lines = append(lines,
+			fmt.Sprintf("  <a class=\"books-page-item\" href=\"/%s/index.html\" data-book-search=\"%s\">", item.BookDirName, escapeHTMLAttr(strings.ToLower(strings.Join(searchParts, " ")))),
+			fmt.Sprintf("    <span class=\"books-page-item__title\">%s</span>", escapeHTML(meta.DisplayName)),
+			fmt.Sprintf("    <span class=\"books-page-item__desc\">%s</span>", escapeHTML(meta.Description)),
+			fmt.Sprintf("    <span class=\"books-page-item__meta\">%s</span>", escapeHTML(buildBooksPageMeta(meta, item.BookDirName))),
+			"    <span class=\"books-page-item__action\">进入文档</span>",
+			"  </a>",
+		)
+		count++
+	}
+	lines = append(lines,
+		"</div>",
+		fmt.Sprintf("<p id=\"books-page-empty\" class=\"books-page-empty\" hidden>没有找到匹配结果，试试别的关键词。当前共 %d 本书。</p>", count),
+		"",
+		"<script>",
+		"(function () {",
+		"  var input = document.getElementById('books-page-search-input');",
+		"  var status = document.getElementById('books-page-search-status');",
+		"  var empty = document.getElementById('books-page-empty');",
+		"  var items = Array.prototype.slice.call(document.querySelectorAll('#books-page-list [data-book-search]'));",
+		fmt.Sprintf("  var total = %d;", count),
+		"  function update() {",
+		"    var keyword = ((input && input.value) || '').trim().toLowerCase();",
+		"    var visible = 0;",
+		"    items.forEach(function (item) {",
+		"      var matched = !keyword || (item.getAttribute('data-book-search') || '').indexOf(keyword) !== -1;",
+		"      item.hidden = !matched;",
+		"      if (matched) visible += 1;",
+		"    });",
+		"    if (status) {",
+		"      status.textContent = keyword ? ('找到 ' + visible + ' / ' + total + ' 本书') : ('共 ' + total + ' 本书');",
+		"    }",
+		"    if (empty) {",
+		"      empty.hidden = visible !== 0;",
+		"    }",
+		"  }",
+		"  if (input) {",
+		"    input.addEventListener('input', update);",
+		"  }",
+		"  update();",
+		"})();",
+		"</script>",
+	)
+
+	return strings.Join(lines, "\n"), nil
+}
+
 func (s *Service) booksPageTitle() string {
 	if strings.TrimSpace(s.siteCfg.BooksPageTitle) != "" {
 		return strings.TrimSpace(s.siteCfg.BooksPageTitle)
 	}
 	return "全部书籍"
+}
+
+func buildBooksPageMeta(meta *configloader.BookMeta, bookDir string) string {
+	parts := make([]string, 0, 3)
+	if meta.Version != "" {
+		parts = append(parts, "版本 "+meta.Version)
+	}
+	if len(meta.Tags) > 0 {
+		parts = append(parts, "标签 "+strings.Join(meta.Tags, " / "))
+	}
+	if len(parts) == 0 {
+		return bookDir
+	}
+	return strings.Join(parts, " · ")
 }
 
 func (s *Service) siteLogoPath() string {
@@ -673,6 +773,21 @@ func escapeFrontMatterString(value string) string {
 	value = strings.ReplaceAll(value, `\`, `\\`)
 	value = strings.ReplaceAll(value, `"`, `\"`)
 	return value
+}
+
+func escapeHTML(value string) string {
+	replacer := strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		`"`, "&quot;",
+		"'", "&#39;",
+	)
+	return replacer.Replace(value)
+}
+
+func escapeHTMLAttr(value string) string {
+	return escapeHTML(value)
 }
 
 func (s *Service) buildMainSiteConfig() string {

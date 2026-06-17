@@ -13,3 +13,109 @@
 .content .hextra-cards {
   margin-top: 2rem;
 }
+
+.books-page-search {
+  margin: 1.5rem 0 1rem;
+}
+
+.books-page-search__label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+}
+
+.books-page-search__input {
+  width: 100%;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 0.9rem;
+  padding: 0.9rem 1rem;
+  background: rgba(255, 255, 255, 0.95);
+  box-sizing: border-box;
+}
+
+.dark .books-page-search__input {
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.72);
+  color: inherit;
+}
+
+.books-page-search__status {
+  margin: 0.65rem 0 0;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.dark .books-page-search__status {
+  color: #94a3b8;
+}
+
+.books-page-list {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1.5rem;
+}
+
+.books-page-item {
+  display: grid;
+  gap: 0.45rem;
+  padding: 1.1rem 1.2rem;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 1rem;
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.98));
+  text-decoration: none;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.books-page-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(14, 116, 144, 0.28);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+}
+
+.dark .books-page-item {
+  border-color: rgba(148, 163, 184, 0.16);
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.96));
+}
+
+.books-page-item__title {
+  color: #0f172a;
+  font-size: 1.08rem;
+  font-weight: 800;
+}
+
+.dark .books-page-item__title {
+  color: #e2e8f0;
+}
+
+.books-page-item__desc {
+  color: #334155;
+  line-height: 1.6;
+}
+
+.dark .books-page-item__desc {
+  color: #cbd5e1;
+}
+
+.books-page-item__meta {
+  color: #64748b;
+  font-size: 0.92rem;
+}
+
+.dark .books-page-item__meta {
+  color: #94a3b8;
+}
+
+.books-page-item__action {
+  color: #0f766e;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.dark .books-page-item__action {
+  color: #5eead4;
+}
+
+.books-page-empty {
+  margin-top: 1rem;
+  color: #64748b;
+}

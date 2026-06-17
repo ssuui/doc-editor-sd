@@ -7,7 +7,7 @@
         {{ partial "custom/page-begin.html" . }}
         {{ partial "breadcrumb.html" (dict "page" . "enable" false) }}
         <div class="content">
-          {{ if .Title }}<h1>{{ .Title }}</h1>{{ end }}
+          {{ if and .Title (not (.Params.hideTitle | default false)) }}<h1>{{ .Title }}</h1>{{ end }}
           {{ partial "custom/content-begin.html" . }}
           {{ .Content }}
           {{ partial "custom/content-end.html" . }}

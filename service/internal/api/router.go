@@ -54,11 +54,15 @@ func Register(r *gin.Engine, svc Services, staticDir string) {
 			respondFileResult(c, tree, err)
 		})
 		fsGroup.GET("/book/list", func(c *gin.Context) {
-			books, err := fsmanager.ListBooks(filepath.Join(svc.SourceDir, "_site_meta.yaml"))
+			books, err := fsmanager.ListBooks(filepath.Join(svc.SourceDir, "_books_meta.yaml"))
 			respondFileResult(c, books, err)
 		})
 		fsGroup.POST("/site/rebuild-meta", func(c *gin.Context) {
 			books, err := svc.FS.RebuildSiteMeta()
+			respondFileResult(c, books, err)
+		})
+		fsGroup.POST("/site/rebuild-books-meta", func(c *gin.Context) {
+			books, err := svc.FS.RebuildBooksMeta()
 			respondFileResult(c, books, err)
 		})
 		fsGroup.GET("/book/tree", func(c *gin.Context) {
@@ -88,46 +92,46 @@ func Register(r *gin.Engine, svc Services, staticDir string) {
 			}
 			respondFileOnly(c, svc.FS.SaveFile(req.Path, req.Content))
 		})
-			fsGroup.POST("/file/new", func(c *gin.Context) {
-				var req struct {
-					Type string `json:"type"`
-					Path string `json:"path"`
-				}
-				if c.ShouldBindJSON(&req) != nil {
-					Fail(c, 9999, "请求参数错误")
-					return
-				}
-				respondFileOnly(c, svc.FS.NewPath(req.Type, req.Path))
-			})
-			fsGroup.POST("/file/upload", func(c *gin.Context) {
-				targetDir := c.PostForm("target_dir")
-				if targetDir == "" || strings.Contains(targetDir, "..") {
-					Fail(c, 2003, "非法路径")
-					return
-				}
-				file, header, err := c.Request.FormFile("file")
-				if err != nil {
-					Fail(c, 9999, "未找到上传文件")
-					return
-				}
-				defer file.Close()
-				maxBytes := int64(svc.System.EditorLimit.MaxFileMB) * 1024 * 1024
-				data, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
-				if err != nil {
-					Fail(c, 9999, "读取上传文件失败")
-					return
-				}
-				if int64(len(data)) > maxBytes {
-					Fail(c, 9999, fmt.Sprintf("文件大小超过 %dMB", svc.System.EditorLimit.MaxFileMB))
-					return
-				}
-				finalPath, err := svc.FS.UploadFile(targetDir, header.Filename, data)
-				if err != nil {
-					Fail(c, 2002, err.Error())
-					return
-				}
-				respondFileResult(c, gin.H{"path": finalPath}, nil)
-			})
+		fsGroup.POST("/file/new", func(c *gin.Context) {
+			var req struct {
+				Type string `json:"type"`
+				Path string `json:"path"`
+			}
+			if c.ShouldBindJSON(&req) != nil {
+				Fail(c, 9999, "请求参数错误")
+				return
+			}
+			respondFileOnly(c, svc.FS.NewPath(req.Type, req.Path))
+		})
+		fsGroup.POST("/file/upload", func(c *gin.Context) {
+			targetDir := c.PostForm("target_dir")
+			if targetDir == "" || strings.Contains(targetDir, "..") {
+				Fail(c, 2003, "非法路径")
+				return
+			}
+			file, header, err := c.Request.FormFile("file")
+			if err != nil {
+				Fail(c, 9999, "未找到上传文件")
+				return
+			}
+			defer file.Close()
+			maxBytes := int64(svc.System.EditorLimit.MaxFileMB) * 1024 * 1024
+			data, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
+			if err != nil {
+				Fail(c, 9999, "读取上传文件失败")
+				return
+			}
+			if int64(len(data)) > maxBytes {
+				Fail(c, 9999, fmt.Sprintf("文件大小超过 %dMB", svc.System.EditorLimit.MaxFileMB))
+				return
+			}
+			finalPath, err := svc.FS.UploadFile(targetDir, header.Filename, data)
+			if err != nil {
+				Fail(c, 2002, err.Error())
+				return
+			}
+			respondFileResult(c, gin.H{"path": finalPath}, nil)
+		})
 		fsGroup.DELETE("/file/remove", func(c *gin.Context) {
 			var req struct {
 				Path string `json:"path"`
@@ -284,16 +288,14 @@ func loginHandler(cfg *configloader.SystemConfig) gin.HandlerFunc {
 func startPublish(c *gin.Context, svc Services, mode string, chosen []string) {
 	books := chosen
 	if mode == "full" {
-		list, err := fsmanager.ListBooks(filepath.Join(svc.SourceDir, "_site_meta.yaml"))
+		list, err := fsmanager.ListBooks(filepath.Join(svc.SourceDir, "_books_meta.yaml"))
 		if err != nil {
 			Fail(c, 9999, err.Error())
 			return
 		}
 		books = books[:0]
 		for _, item := range list {
-			if item.EnableHomeShow {
-				books = append(books, item.BookDirName)
-			}
+			books = append(books, item.BookDirName)
 		}
 	}
 	books = normalizePublishBooks(books)
