@@ -255,8 +255,6 @@ func (s *Service) generateHomePage(sourceRoot string, siteMeta *configloader.Sit
 		"",
 		"<div id=\"book-list\"></div>",
 		"",
-		"## 文档总览",
-		"",
 	}
 	if includeHomeNotice && strings.TrimSpace(s.siteCfg.HomeNoticeText) != "" {
 		lines = append(lines,
@@ -310,8 +308,6 @@ func (s *Service) generateBooksPage(sourceRoot string, title string) (string, er
 		"params:",
 		"  hideTitle: true",
 		"---",
-		"",
-		"## 文档总览",
 		"",
 		"<div class=\"books-page-search\">",
 		"  <label class=\"books-page-search__label\" for=\"books-page-search-input\">搜索书籍</label>",
