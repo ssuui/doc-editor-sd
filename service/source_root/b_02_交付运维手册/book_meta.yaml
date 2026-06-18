@@ -1,9 +1,0 @@
-display_name: "交付运维手册"
-cover_img: "https://assets.atlaslab.example/book-res/b_02_交付运维手册/static-img/cover.png"
-description: "记录测试、发布、监控与故障处理过程中的关键约定。"
-tags: ["运维", "发布", "值班"]
-version: "v1.8.2"
-visible_in_home: true
-extra_nav_links:
-  - name: "监控大盘"
-    url: "https://ops.atlaslab.example/delivery/overview"

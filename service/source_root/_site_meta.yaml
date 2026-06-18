@@ -1,13 +1,19 @@
 book_list:
     - book_dir_name: b_01_工程协作手册
       weight: 10
-      enable_home_show: true
+      enable_home_show: false
     - book_dir_name: b_02_交付运维手册
       weight: 20
-      enable_home_show: true
+      enable_home_show: false
     - book_dir_name: b_03_产品需求流程
       weight: 30
-      enable_home_show: true
+      enable_home_show: false
     - book_dir_name: b_04_产品交付流程
       weight: 40
+      enable_home_show: false
+    - book_dir_name: b_the_road_less_traveled
+      weight: 50
       enable_home_show: true
+    - book_dir_name: b_the_courage_to_be_disliked
+      weight: 60
+      enable_home_show: false

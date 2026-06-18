@@ -1,0 +1,85 @@
+display_name: "被讨厌的勇气"
+cover_img: "/static-img/cover.jpg"
+description: "阿德勒哲学课 EPUB 转换版本，按章节拆分并保留插图。"
+tags: ["读书", "心理学", "阿德勒"]
+version: "imported"
+visible_in_home: false
+sidebar_order:
+  - 01-front-matter/_index.md
+  - 01-front-matter/01-original-info.md
+  - 01-front-matter/02-related-content.md
+  - 01-front-matter/03-praise.md
+  - 01-front-matter/04-recommendation-1-courage-psychology.md
+  - 01-front-matter/05-recommendation-2-self-bonds-and-liberation.md
+  - 01-front-matter/06-recommendation-3-courage-through-worth.md
+  - 01-front-matter/07-translator-preface.md
+  - 01-front-matter/08-introduction.md
+  - 02-first-night/_index.md
+  - 02-first-night/01-overview.md
+  - 02-first-night/02-the-third-giant-of-psychology.md
+  - 02-first-night/03-finding-causes-does-not-change-people.md
+  - 02-first-night/04-trauma-does-not-exist.md
+  - 02-first-night/05-anger-is-fabricated.md
+  - 02-first-night/06-freud-was-wrong.md
+  - 02-first-night/07-socrates-and-adler.md
+  - 02-first-night/08-do-you-want-to-become-someone-else.md
+  - 02-first-night/09-your-unhappiness-is-your-choice.md
+  - 02-first-night/10-people-decide-not-to-change.md
+  - 02-first-night/11-life-depends-on-the-present.md
+  - 03-second-night/_index.md
+  - 03-second-night/01-overview.md
+  - 03-second-night/02-why-do-you-hate-yourself.md
+  - 03-second-night/03-all-problems-are-interpersonal.md
+  - 03-second-night/04-inferiority-is-subjective.md
+  - 03-second-night/05-inferiority-complex-as-excuse.md
+  - 03-second-night/06-the-arrogant-are-inferior.md
+  - 03-second-night/07-life-is-not-a-competition.md
+  - 03-second-night/08-only-you-care-about-your-look.md
+  - 03-second-night/09-power-struggles-and-revenge.md
+  - 03-second-night/10-admitting-mistakes-is-not-losing.md
+  - 03-second-night/11-three-tasks-of-life.md
+  - 03-second-night/12-red-thread-and-tight-chains.md
+  - 03-second-night/13-life-lies-teach-escape.md
+  - 03-second-night/14-psychology-of-courage.md
+  - 04-third-night/_index.md
+  - 04-third-night/01-overview.md
+  - 04-third-night/02-freedom-is-no-longer-seeking-approval.md
+  - 04-third-night/03-do-you-live-for-expectations.md
+  - 04-third-night/04-separate-life-tasks.md
+  - 04-third-night/05-parents-must-let-go.md
+  - 04-third-night/06-let-go-and-fly.md
+  - 04-third-night/07-cut-the-gordian-knot.md
+  - 04-third-night/08-approval-kills-freedom.md
+  - 04-third-night/09-freedom-is-being-disliked.md
+  - 04-third-night/10-the-trump-card-is-in-your-hand.md
+  - 05-fourth-night/_index.md
+  - 05-fourth-night/01-overview.md
+  - 05-fourth-night/02-individual-psychology-and-holism.md
+  - 05-fourth-night/03-ultimate-goal-of-relationships.md
+  - 05-fourth-night/04-approval-seeking-is-self-centered.md
+  - 05-fourth-night/05-center-of-your-world-map.md
+  - 05-fourth-night/06-find-your-place-in-a-wider-world.md
+  - 05-fourth-night/07-neither-praise-nor-blame.md
+  - 05-fourth-night/08-encouragement-brings-courage.md
+  - 05-fourth-night/09-worth-brings-courage.md
+  - 05-fourth-night/10-existence-itself-has-value.md
+  - 05-fourth-night/11-equal-relationships-anywhere.md
+  - 06-fifth-night/_index.md
+  - 06-fifth-night/01-overview.md
+  - 06-fifth-night/02-too-much-self-consciousness.md
+  - 06-fifth-night/03-accept-yourself-not-affirm-yourself.md
+  - 06-fifth-night/04-credit-vs-trust.md
+  - 06-fifth-night/05-work-is-contribution.md
+  - 06-fifth-night/06-youth-can-surpass-age.md
+  - 06-fifth-night/07-workaholism-is-a-life-lie.md
+  - 06-fifth-night/08-happiness-starts-now.md
+  - 06-fifth-night/09-two-roads-before-idealists.md
+  - 06-fifth-night/10-courage-to-be-ordinary.md
+  - 06-fifth-night/11-life-is-a-series-of-moments.md
+  - 06-fifth-night/12-dance-your-life.md
+  - 06-fifth-night/13-the-now-is-what-matters.md
+  - 06-fifth-night/14-greatest-life-lie.md
+  - 06-fifth-night/15-meaning-is-yours-to-decide.md
+  - 07-back-matter/_index.md
+  - 07-back-matter/01-afterword.md
+  - 07-back-matter/02-author-and-translator.md

@@ -1,9 +1,0 @@
-display_name: "产品交付流程"
-cover_img: "https://assets.atlaslab.example/book-res/b_04_产品交付流程/static-img/cover.png"
-description: "梳理需求冻结、发布排期、上线验收到复盘归档的交付流程。"
-tags: ["产品", "交付", "流程"]
-version: "v1.4.0"
-visible_in_home: true
-extra_nav_links:
-  - name: "交付排期"
-    url: "https://pm.atlaslab.example/releases/calendar"
