@@ -1,13 +1,13 @@
-site_title: "AtlasLab 知识库"
+site_title: "蛋蛋的知识库"
 site_logo: "/global_static/logo.png"
-footer_text: "AtlasLab 文档中心"
+footer_text: "谢谢光顾 ~ "
 footer_copyright: ""
 icp:
   number: "京ICP备2026001234号-1"
   link: "https://beian.miit.gov.cn/"
-home_notice_text: "当前为演示模板站点，内容与域名均为示例数据。"
+home_notice_text: "欢迎光临"
 books_page_path: "/books/"
-books_page_title: "全部书籍"
+books_page_title: "书单"
 home_card_layout:
   column_count: 3
   show_book_desc: true
@@ -15,7 +15,7 @@ home_card_layout:
 global_nav:
   - name: "首页"
     link: "/"
-  - name: "资料总览"
+  - name: "书单"
     link: "/books/index.html"
 custom_global_css: ""
 enable_sitemap: true

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -62,6 +63,18 @@ type SiteGlobalConfig struct {
 	CustomGlobalCSS string         `yaml:"custom_global_css"`
 	EnableSitemap   bool           `yaml:"enable_sitemap"`
 	EnableRSS       bool           `yaml:"enable_rss"`
+}
+
+func (c *SiteGlobalConfig) EffectiveSiteTitle() string {
+	title := strings.TrimSpace(c.SiteTitle)
+	if title == "" {
+		return "知识库"
+	}
+	return title
+}
+
+func (c *SiteGlobalConfig) AdminTitle() string {
+	return c.EffectiveSiteTitle() + "发布器"
 }
 
 type ICPConfig struct {

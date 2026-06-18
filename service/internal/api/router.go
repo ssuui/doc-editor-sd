@@ -258,11 +258,32 @@ func Register(r *gin.Engine, svc Services, staticDir string) {
 		})
 	}
 
-	r.GET("/", auth.RootHandler(staticDir))
-	r.GET("/login.html", func(c *gin.Context) { c.File(filepath.Join(staticDir, "login.html")) })
-	r.GET("/index.html", func(c *gin.Context) { c.File(filepath.Join(staticDir, "index.html")) })
+	r.GET("/", func(c *gin.Context) {
+		if !auth.HasValidSession() {
+			c.Redirect(http.StatusFound, "/login.html")
+			return
+		}
+		renderConfiguredPage(staticDir, "index.html", svc.Site)(c)
+	})
+	r.GET("/login.html", renderConfiguredPage(staticDir, "login.html", svc.Site))
+	r.GET("/index.html", renderConfiguredPage(staticDir, "index.html", svc.Site))
 	r.GET("/styles.css", func(c *gin.Context) { c.File(filepath.Join(staticDir, "styles.css")) })
 	r.Static("/assets", filepath.Join(staticDir, "assets"))
+}
+
+func renderConfiguredPage(staticDir string, page string, siteCfg *configloader.SiteGlobalConfig) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		path := filepath.Join(staticDir, page)
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		content := string(raw)
+		content = strings.ReplaceAll(content, "__SITE_TITLE__", siteCfg.EffectiveSiteTitle())
+		content = strings.ReplaceAll(content, "__ADMIN_TITLE__", siteCfg.AdminTitle())
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(content))
+	}
 }
 
 func loginHandler(cfg *configloader.SystemConfig) gin.HandlerFunc {
