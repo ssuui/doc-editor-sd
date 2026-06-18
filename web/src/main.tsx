@@ -2424,7 +2424,7 @@ async function refreshAllWithHints(extraPaths: string[] = [], activePath = "") {
 
 function detectBookFromPath(path?: string) {
   const cleaned = String(path || "").replace(/^\/+/, "");
-  const match = cleaned.match(/^(book_[^/]+)/);
+  const match = cleaned.match(/^((?:b_|book_)[^/]+)/);
   return match?.[1] || "";
 }
 
