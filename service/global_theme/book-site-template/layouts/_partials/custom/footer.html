@@ -23,3 +23,407 @@
     {{- end -}}
   </div>
 {{- end -}}
+
+<div id="hextra-reading-history-dock" class="hextra-reading-dock hx:hidden" aria-live="polite"></div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const storageKey = "hextra-reading-history-v1";
+    const dockPositionKey = "hextra-reading-dock-position-v1";
+    const maxRecords = 5;
+    const path = window.location.pathname + window.location.search;
+    const content = document.getElementById("content");
+    const dockRoot = document.getElementById("hextra-reading-history-dock");
+    const resumeBanner = document.getElementById("hextra-reading-resume-banner");
+
+    if (!content) {
+      return;
+    }
+
+    const readRecords = function () {
+      try {
+        const raw = localStorage.getItem(storageKey);
+        if (!raw) {
+          return [];
+        }
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (error) {
+        return [];
+      }
+    };
+
+    const writeRecords = function (records) {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(records.slice(0, maxRecords)));
+      } catch (error) {
+      }
+    };
+
+    const getScrollMetrics = function () {
+      const scrollTop = Math.max(window.scrollY || 0, 0);
+      const scrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, 0);
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+      const maxScroll = Math.max(scrollHeight - viewportHeight, 0);
+      const progress = maxScroll > 0 ? Math.min(scrollTop / maxScroll, 1) : 0;
+      return {
+        scrollTop: Math.round(scrollTop),
+        progress: Math.round(progress * 100)
+      };
+    };
+
+    const getTitle = function () {
+      const heading = document.querySelector("main#content h1");
+      return (heading ? heading.textContent : document.title).trim();
+    };
+
+    const upsertRecord = function () {
+      const metrics = getScrollMetrics();
+      const title = getTitle();
+      const records = readRecords().filter(function (item) {
+        return item && item.path !== path;
+      });
+
+      records.unshift({
+        path: path,
+        title: title,
+        scrollTop: metrics.scrollTop,
+        progress: metrics.progress,
+        updatedAt: new Date().toISOString()
+      });
+
+      writeRecords(records);
+      renderHistoryDock(records);
+    };
+
+    const formatTime = function (value) {
+      if (!value) {
+        return "";
+      }
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return "";
+      }
+      return date.toLocaleString("zh-CN", {
+        month: "numeric",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    };
+
+    const goToRecord = function (record) {
+      const target = new URL(record.path, window.location.origin);
+      target.searchParams.set("resume", String(record.scrollTop || 0));
+      window.location.href = target.toString();
+    };
+
+    const renderHistoryDock = function (records) {
+      if (!dockRoot) {
+        return;
+      }
+
+      const visibleRecords = records.filter(function (item) {
+        return item && item.path;
+      }).slice(0, maxRecords);
+
+      if (visibleRecords.length === 0) {
+        dockRoot.classList.add("hx:hidden");
+        dockRoot.innerHTML = "";
+        return;
+      }
+
+      dockRoot.classList.remove("hx:hidden");
+      dockRoot.innerHTML = [
+        '<button type="button" class="hextra-reading-dock__toggle" aria-expanded="false">最近阅读</button>',
+        '<div class="hextra-reading-dock__panel hx:hidden">',
+        '  <div class="hextra-reading-dock__header">',
+        '    <strong class="hextra-reading-dock__title">最近阅读</strong>',
+        '    <button type="button" class="hextra-reading-dock__clear">清空</button>',
+        '  </div>',
+        '  <div class="hextra-reading-dock__list">',
+        visibleRecords.map(function (item) {
+          return [
+            '<button type="button" class="hextra-reading-dock__item" data-path="', item.path, '">',
+            '  <span class="hextra-reading-dock__item-title">', item.title || item.path, '</span>',
+            '  <span class="hextra-reading-dock__item-meta">', (item.progress || 0), '%</span>',
+            '</button>'
+          ].join("");
+        }).join(""),
+        '  </div>',
+        '</div>'
+      ].join("");
+
+      const toggle = dockRoot.querySelector(".hextra-reading-dock__toggle");
+      const panel = dockRoot.querySelector(".hextra-reading-dock__panel");
+      const applyDockSide = function () {
+        const rect = dockRoot.getBoundingClientRect();
+        const useLeft = rect.left + rect.width / 2 < window.innerWidth / 2;
+        dockRoot.classList.toggle("is-left", useLeft);
+        dockRoot.classList.toggle("is-right", !useLeft);
+      };
+      const showDockFully = function () {
+        dockRoot.classList.remove("is-peek");
+      };
+      const hideDockToEdge = function () {
+        dockRoot.classList.add("is-peek");
+      };
+      const closeDock = function () {
+        if (!toggle || !panel) {
+          return;
+        }
+        toggle.setAttribute("aria-expanded", "false");
+        panel.classList.add("hx:hidden");
+      };
+
+      if (toggle && panel) {
+        toggle.addEventListener("click", function () {
+          if (dragged) {
+            return;
+          }
+          const wasPeek = dockRoot.classList.contains("is-peek");
+          if (wasPeek) {
+            showDockFully();
+          }
+          const willOpen = panel.classList.contains("hx:hidden");
+          toggle.setAttribute("aria-expanded", willOpen ? "true" : "false");
+          panel.classList.toggle("hx:hidden", !willOpen);
+          applyDockSide();
+        });
+      }
+
+      dockRoot.querySelectorAll("[data-path]").forEach(function (button) {
+        button.addEventListener("click", function () {
+          const record = visibleRecords.find(function (item) {
+            return item.path === button.getAttribute("data-path");
+          });
+          if (record) {
+            goToRecord(record);
+          }
+        });
+      });
+
+      const clearButton = dockRoot.querySelector(".hextra-reading-dock__clear");
+      if (clearButton) {
+        clearButton.addEventListener("click", function () {
+          localStorage.removeItem(storageKey);
+          localStorage.removeItem(dockPositionKey);
+          closeDock();
+          dockRoot.classList.add("hx:hidden");
+          dockRoot.innerHTML = "";
+          if (resumeBanner) {
+            resumeBanner.classList.add("hx:hidden");
+            resumeBanner.innerHTML = "";
+          }
+        });
+      }
+
+      const savedPosition = (function () {
+        try {
+          const raw = localStorage.getItem(dockPositionKey);
+          return raw ? JSON.parse(raw) : null;
+        } catch (error) {
+          return null;
+        }
+      })();
+
+      if (savedPosition && Number.isFinite(savedPosition.left) && Number.isFinite(savedPosition.top)) {
+        dockRoot.style.left = savedPosition.left + "px";
+        dockRoot.style.top = savedPosition.top + "px";
+        dockRoot.style.right = "auto";
+        dockRoot.style.bottom = "auto";
+      }
+      applyDockSide();
+      hideDockToEdge();
+
+      let activePointerId = null;
+      let dragOffsetX = 0;
+      let dragOffsetY = 0;
+      let dragged = false;
+
+      const persistDockPosition = function (left, top) {
+        try {
+          localStorage.setItem(dockPositionKey, JSON.stringify({ left: left, top: top }));
+        } catch (error) {
+        }
+      };
+
+      const snapDockToEdge = function () {
+        const rect = dockRoot.getBoundingClientRect();
+        const margin = 12;
+        const maxLeft = Math.max(window.innerWidth - rect.width - margin, margin);
+        const maxTop = Math.max(window.innerHeight - rect.height - margin, margin);
+        const targetLeft = rect.left + rect.width / 2 < window.innerWidth / 2 ? margin : maxLeft;
+        const targetTop = Math.min(Math.max(rect.top, margin), maxTop);
+        dockRoot.style.left = targetLeft + "px";
+        dockRoot.style.top = targetTop + "px";
+        dockRoot.style.right = "auto";
+        dockRoot.style.bottom = "auto";
+        persistDockPosition(targetLeft, targetTop);
+        applyDockSide();
+        hideDockToEdge();
+      };
+
+      if (toggle) {
+        toggle.addEventListener("pointerdown", function (event) {
+          activePointerId = event.pointerId;
+          dragged = false;
+          showDockFully();
+          closeDock();
+          const rect = dockRoot.getBoundingClientRect();
+          dragOffsetX = event.clientX - rect.left;
+          dragOffsetY = event.clientY - rect.top;
+          dockRoot.classList.add("is-dragging");
+          dockRoot.style.left = rect.left + "px";
+          dockRoot.style.top = rect.top + "px";
+          dockRoot.style.right = "auto";
+          dockRoot.style.bottom = "auto";
+          if (toggle.setPointerCapture) {
+            toggle.setPointerCapture(activePointerId);
+          }
+        });
+
+        toggle.addEventListener("pointermove", function (event) {
+          if (activePointerId !== event.pointerId) {
+            return;
+          }
+          const margin = 12;
+          const rect = dockRoot.getBoundingClientRect();
+          const maxLeft = Math.max(window.innerWidth - rect.width - margin, margin);
+          const maxTop = Math.max(window.innerHeight - rect.height - margin, margin);
+          const nextLeft = Math.min(Math.max(event.clientX - dragOffsetX, margin), maxLeft);
+          const nextTop = Math.min(Math.max(event.clientY - dragOffsetY, margin), maxTop);
+          if (Math.abs(nextLeft - rect.left) > 3 || Math.abs(nextTop - rect.top) > 3) {
+            dragged = true;
+          }
+          dockRoot.style.left = nextLeft + "px";
+          dockRoot.style.top = nextTop + "px";
+          dockRoot.style.right = "auto";
+          dockRoot.style.bottom = "auto";
+          applyDockSide();
+        });
+
+        const releaseDrag = function (event) {
+          if (activePointerId !== event.pointerId) {
+            return;
+          }
+          const didDrag = dragged;
+          if (toggle.releasePointerCapture) {
+            try {
+              toggle.releasePointerCapture(activePointerId);
+            } catch (error) {
+            }
+          }
+          activePointerId = null;
+          dockRoot.classList.remove("is-dragging");
+          snapDockToEdge();
+          if (didDrag) {
+            event.preventDefault();
+          }
+          window.setTimeout(function () {
+            dragged = false;
+          }, 0);
+        };
+
+        toggle.addEventListener("pointerup", releaseDrag);
+        toggle.addEventListener("pointercancel", releaseDrag);
+      }
+
+    };
+
+    const renderResumeBanner = function (record) {
+      if (!resumeBanner || !record || !record.scrollTop || record.scrollTop < 80) {
+        if (resumeBanner) {
+          resumeBanner.classList.add("hx:hidden");
+          resumeBanner.innerHTML = "";
+        }
+        return;
+      }
+
+      resumeBanner.classList.remove("hx:hidden");
+      resumeBanner.innerHTML = [
+        '<div class="hextra-reading-resume">',
+        '  <div class="hextra-reading-resume__body">',
+        '    <strong class="hextra-reading-resume__title">继续阅读</strong>',
+        '    <span class="hextra-reading-resume__meta">上次读到 ', (record.progress || 0), '%', (record.updatedAt ? ' · ' + formatTime(record.updatedAt) : ''), '</span>',
+        '  </div>',
+        '  <div class="hextra-reading-resume__actions">',
+        '    <button type="button" class="hextra-reading-resume__button" data-action="resume">继续</button>',
+        '    <button type="button" class="hextra-reading-resume__button is-secondary" data-action="reset">从顶部开始</button>',
+        '  </div>',
+        '</div>'
+      ].join("");
+
+      resumeBanner.querySelector('[data-action="resume"]').addEventListener("click", function () {
+        window.scrollTo({ top: record.scrollTop, behavior: "smooth" });
+        resumeBanner.classList.add("hx:hidden");
+      });
+
+      resumeBanner.querySelector('[data-action="reset"]').addEventListener("click", function () {
+        const records = readRecords().map(function (item) {
+          if (item.path === path) {
+            return Object.assign({}, item, { scrollTop: 0, progress: 0, updatedAt: new Date().toISOString() });
+          }
+          return item;
+        });
+        writeRecords(records);
+        resumeBanner.classList.add("hx:hidden");
+      });
+    };
+
+    const applyResumeFromQuery = function () {
+      const url = new URL(window.location.href);
+      const resumeValue = Number(url.searchParams.get("resume"));
+      if (!Number.isFinite(resumeValue) || resumeValue <= 0) {
+        return false;
+      }
+
+      url.searchParams.delete("resume");
+      window.history.replaceState({}, "", url.toString());
+      window.requestAnimationFrame(function () {
+        window.requestAnimationFrame(function () {
+          window.scrollTo({ top: resumeValue, behavior: "auto" });
+        });
+      });
+      return true;
+    };
+
+    let saveTimer = 0;
+    const scheduleSave = function () {
+      window.clearTimeout(saveTimer);
+      saveTimer = window.setTimeout(upsertRecord, 600);
+    };
+
+    const records = readRecords();
+    const currentRecord = records.find(function (item) {
+      return item && item.path === path;
+    });
+
+    renderHistoryDock(records);
+    if (!applyResumeFromQuery()) {
+      renderResumeBanner(currentRecord);
+    }
+
+    scheduleSave();
+    window.addEventListener("scroll", scheduleSave, { passive: true });
+    window.addEventListener("beforeunload", upsertRecord);
+    document.addEventListener("click", function (event) {
+      if (!dockRoot || dockRoot.classList.contains("hx:hidden")) {
+        return;
+      }
+      if (!dockRoot.contains(event.target)) {
+        const toggle = dockRoot.querySelector(".hextra-reading-dock__toggle");
+        const panel = dockRoot.querySelector(".hextra-reading-dock__panel");
+        if (toggle && panel) {
+          toggle.setAttribute("aria-expanded", "false");
+          panel.classList.add("hx:hidden");
+        }
+      }
+    });
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "hidden") {
+        upsertRecord();
+      }
+    });
+  });
+</script>

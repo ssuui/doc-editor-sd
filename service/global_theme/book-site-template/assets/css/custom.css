@@ -20,20 +20,293 @@
   font-weight: 600;
 }
 
+.hextra-sidebar-item > a > span {
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+
+.hextra-footer {
+  margin-top: 2rem;
+}
+
+.hextra-footer .hextra-custom-footer {
+  padding-top: 1.75rem;
+  padding-bottom: 1.75rem;
+}
+
+.hextra-reading-resume {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.125rem;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 1rem;
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.88));
+}
+
+.hextra-reading-resume__body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.hextra-reading-resume__title {
+  color: #0f172a;
+  font-size: 0.95rem;
+}
+
+.hextra-reading-resume__meta {
+  color: #475569;
+  font-size: 0.85rem;
+}
+
+.hextra-reading-resume__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.hextra-reading-resume__button,
+.hextra-reading-history__clear,
+.hextra-reading-history__item {
+  border: 0;
+  cursor: pointer;
+}
+
+.hextra-reading-resume__button {
+  padding: 0.55rem 0.9rem;
+  border-radius: 999px;
+  background: #0f172a;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.hextra-reading-resume__button.is-secondary {
+  background: rgba(15, 23, 42, 0.08);
+  color: #0f172a;
+}
+
+.hextra-reading-dock {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 16;
+  touch-action: none;
+}
+
+.hextra-reading-dock__toggle,
+.hextra-reading-dock__item,
+.hextra-reading-dock__clear {
+  border: 0;
+  cursor: pointer;
+}
+
+.hextra-reading-dock__toggle {
+  padding: 0.8rem 1rem;
+  min-width: 6.25rem;
+  border-radius: 999px;
+  background: #0f172a;
+  color: #fff;
+  box-shadow: 0 18px 32px rgba(15, 23, 42, 0.2);
+  font-size: 0.88rem;
+  font-weight: 600;
+  white-space: nowrap;
+  text-align: center;
+  opacity: 0.96;
+}
+
+.hextra-reading-dock__panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.75rem);
+  width: min(19rem, calc(100vw - 2rem));
+  padding: 0.9rem;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(10px);
+}
+
+.hextra-reading-dock.is-left .hextra-reading-dock__panel {
+  left: max(0px, calc(100% - 1.6rem));
+  right: auto;
+}
+
+.hextra-reading-dock.is-right .hextra-reading-dock__panel {
+  right: 0;
+  left: auto;
+}
+
+.hextra-reading-dock.is-dragging .hextra-reading-dock__toggle {
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.18);
+}
+
+.hextra-reading-dock.is-peek.is-right {
+  transform: translateX(calc(100% - 1.6rem));
+}
+
+.hextra-reading-dock.is-peek.is-left {
+  transform: translateX(calc(-100% + 1.6rem));
+}
+
+.hextra-reading-dock.is-peek .hextra-reading-dock__toggle {
+  opacity: 0.52;
+}
+
+.hextra-reading-dock__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.hextra-reading-dock__title {
+  color: #0f172a;
+  font-size: 0.9rem;
+}
+
+.hextra-reading-dock__clear {
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.hextra-reading-dock__list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.hextra-reading-dock__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.8rem;
+  background: rgba(248, 250, 252, 0.95);
+  text-align: left;
+}
+
+.hextra-reading-dock__item-title {
+  color: #0f172a;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.hextra-reading-dock__item-meta {
+  color: #64748b;
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.dark .hextra-reading-resume {
+  border-color: rgba(71, 85, 105, 0.45);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.84));
+}
+
+.dark .hextra-reading-resume__title,
+.dark .hextra-reading-resume__meta {
+  color: #94a3b8;
+}
+
+.dark .hextra-reading-resume__button.is-secondary {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.dark .hextra-reading-dock__toggle {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.dark .hextra-reading-dock__panel {
+  border-color: rgba(71, 85, 105, 0.45);
+  background: rgba(15, 23, 42, 0.94);
+}
+
+.dark .hextra-reading-dock__title,
+.dark .hextra-reading-dock__item-title {
+  color: #e2e8f0;
+}
+
+.dark .hextra-reading-dock__clear,
+.dark .hextra-reading-dock__item-meta {
+  color: #94a3b8;
+}
+
+.dark .hextra-reading-dock__clear,
+.dark .hextra-reading-dock__item {
+  background: rgba(30, 41, 59, 0.9);
+}
+
 @media (max-width: 48rem) {
+  .hextra-sidebar-container {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0;
+    bottom: 0;
+    width: min(20rem, calc(100vw - 3rem));
+    max-width: calc(100vw - 3rem);
+    padding-top: calc(var(--hextra-navbar-height) + var(--hextra-banner-height, 0px));
+    z-index: 15;
+    transform: translate3d(-100%, 0, 0);
+    visibility: hidden;
+    pointer-events: none;
+    transition: transform 0.28s ease, visibility 0.28s ease;
+    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+  }
+
+  .hextra-sidebar-container[data-mobile-state="open"] {
+    transform: translate3d(0, 0, 0);
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .hextra-sidebar-container[data-mobile-state="closed"] {
+    transform: translate3d(-100%, 0, 0);
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .hextra-reading-resume {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .hextra-reading-resume__actions {
+    width: 100%;
+  }
+
+  .hextra-reading-resume__button {
+    flex: 1 1 auto;
+    text-align: center;
+  }
+
+  .hextra-reading-dock {
+    right: 1rem;
+    bottom: 1rem;
+  }
+
+  .hextra-reading-dock__toggle {
+    padding: 0.72rem 0.95rem;
+    min-width: 5.8rem;
+    font-size: 0.82rem;
+  }
+
   .hextra-mobile-sidebar-overlay {
     position: fixed;
     inset: 0;
     z-index: 14;
     background: rgba(15, 23, 42, 0.4);
     backdrop-filter: blur(2px);
-  }
-
-  .hextra-sidebar-container {
-    width: min(20rem, calc(100vw - 3rem));
-    max-width: calc(100vw - 3rem);
-    z-index: 15;
-    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
   }
 
   .dark .hextra-sidebar-container {

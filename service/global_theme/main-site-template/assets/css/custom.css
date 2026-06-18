@@ -2,6 +2,10 @@
   --hextra-content-width: 76rem;
 }
 
+.hextra-footer {
+  padding-top: 1.5rem;
+}
+
 .content {
   letter-spacing: 0.01em;
 }

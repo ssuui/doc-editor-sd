@@ -304,7 +304,7 @@
       href="{{ .link }}"
       {{ if $external }}target="_blank" rel="noreferrer"{{ end }}
     >
-      <span class="hx:min-w-0 [word-break:break-word]">{{- .title -}}</span>
+      <span class="hx:block hx:w-full hx:min-w-0 hx:text-left [word-break:break-word]">{{- .title -}}</span>
     </a>
     {{- if $hasChildren }}
       <button type="button" class="hextra-sidebar-collapsible-button hx:absolute hx:top-1/2 hx:-translate-y-1/2 hx:ltr:right-2 hx:rtl:left-2 hx:shrink-0 hx:cursor-pointer hx:p-0 hx:text-gray-500 hx:dark:text-neutral-400 hx:group-hover:text-gray-900 hx:dark:group-hover:text-gray-50 hx:group-data-[active=true]:text-primary-800 hx:group-data-[active=true]:dark:text-primary-600 hx:hextra-focus-visible-inset" aria-label="{{ (T "toggleSection") | default "Toggle section" }}" aria-expanded="{{ if $open }}true{{ else }}false{{ end }}">

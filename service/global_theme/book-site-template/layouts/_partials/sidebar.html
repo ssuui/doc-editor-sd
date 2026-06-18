@@ -20,8 +20,8 @@
   {{- end -}}
 {{- end -}}
 
-<div class="hextra-mobile-sidebar-overlay hx:hidden hx:md:hidden" aria-hidden="true"></div>
-<aside class="hextra-sidebar-container hx:flex hx:flex-col hx:print:hidden hx:md:top-[var(--hextra-navbar-height)] hx:md:shrink-0 hx:md:w-64 hx:md:self-start hx:max-md:[transform:translate3d(-100%,0,0)] {{ $sidebarClass }}">
+<div class="hextra-mobile-sidebar-overlay hx:hidden hx:md:hidden" aria-hidden="true" data-mobile-state="closed"></div>
+<aside class="hextra-sidebar-container hx:flex hx:flex-col hx:print:hidden hx:md:top-[var(--hextra-navbar-height)] hx:md:shrink-0 hx:md:w-64 hx:md:self-start {{ $sidebarClass }}" data-mobile-state="closed">
   <div class="hextra-scrollbar hx:overflow-y-auto hx:overflow-x-hidden hx:p-4 hx:grow hx:md:h-[calc(100vh-var(--hextra-navbar-height)-var(--menu-height))]">
     <div class="hx:mb-3 hx:flex hx:items-center hx:justify-between hx:gap-3 hx:md:hidden">
       <span class="hx:text-sm hx:font-semibold hx:text-gray-900 hx:dark:text-gray-100">目录</span>
@@ -35,8 +35,7 @@
       </button>
     </div>
     <ul class="hx:flex hx:flex-col hx:gap-1 hx:md:hidden">
-      <!-- Nav -->
-      {{ template "sidebar-main" (dict "context" site.Home "pageURL" $pageURL "page" $context "toc" true) -}}
+      {{ template "sidebar-main" (dict "context" $navRoot "page" $context "pageURL" $pageURL) }}
       {{ template "sidebar-footer" }}
     </ul>
 
@@ -349,52 +348,100 @@
     const mobileSidebarToggleButtons = document.querySelectorAll(".hextra-mobile-sidebar-toggle");
     const mobileSidebarCloseButtons = document.querySelectorAll(".hextra-mobile-sidebar-close");
     const hamburgerMenu = document.querySelector(".hextra-hamburger-menu");
+    const sidebarContainer = document.querySelector(".hextra-sidebar-container");
     const mobileSidebarOverlay = document.querySelector(".hextra-mobile-sidebar-overlay");
     const mobileQuery = window.matchMedia("(max-width: 767px)");
 
+    const isSidebarOpen = function () {
+      return !!(sidebarContainer && sidebarContainer.dataset.mobileState === "open");
+    };
+
     const syncMobileSidebarState = function () {
-      if (!hamburgerMenu || !mobileSidebarOverlay) {
+      if (!sidebarContainer || !mobileSidebarOverlay) {
         return;
       }
 
-      const isOpen = hamburgerMenu.getAttribute("aria-expanded") === "true";
-      mobileSidebarOverlay.classList.toggle("hx:hidden", !isOpen || !mobileQuery.matches);
-      mobileSidebarOverlay.setAttribute("aria-hidden", isOpen && mobileQuery.matches ? "false" : "true");
+      const isOpen = mobileQuery.matches && isSidebarOpen();
+      mobileSidebarOverlay.classList.toggle("hx:hidden", !isOpen);
+      mobileSidebarOverlay.dataset.mobileState = isOpen ? "open" : "closed";
+      mobileSidebarOverlay.setAttribute("aria-hidden", isOpen ? "false" : "true");
+
+      sidebarContainer.dataset.mobileState = isOpen ? "open" : "closed";
+      sidebarContainer.setAttribute("aria-hidden", isOpen ? "false" : "true");
+      document.body.classList.toggle("hx:overflow-hidden", isOpen);
+      document.body.classList.toggle("hx:md:overflow-auto", isOpen);
+
+      if (hamburgerMenu) {
+        hamburgerMenu.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        const icon = hamburgerMenu.querySelector("svg");
+        if (icon) {
+          icon.classList.toggle("open", isOpen);
+        }
+      }
+    };
+
+    const openSidebar = function () {
+      if (!sidebarContainer || !mobileQuery.matches) {
+        return;
+      }
+      sidebarContainer.dataset.mobileState = "open";
+      syncMobileSidebarState();
+    };
+
+    const closeSidebar = function () {
+      if (!sidebarContainer) {
+        return;
+      }
+      sidebarContainer.dataset.mobileState = "closed";
+      syncMobileSidebarState();
+    };
+
+    const toggleSidebar = function () {
+      if (isSidebarOpen()) {
+        closeSidebar();
+      } else {
+        openSidebar();
+      }
     };
 
     mobileSidebarToggleButtons.forEach(function (button) {
       button.addEventListener("click", function () {
-        if (hamburgerMenu) {
-          hamburgerMenu.click();
-        }
+        toggleSidebar();
       });
     });
 
     mobileSidebarCloseButtons.forEach(function (button) {
       button.addEventListener("click", function () {
-        if (hamburgerMenu && hamburgerMenu.getAttribute("aria-expanded") === "true") {
-          hamburgerMenu.click();
-        }
+        closeSidebar();
       });
     });
 
     if (mobileSidebarOverlay) {
       mobileSidebarOverlay.addEventListener("click", function () {
-        if (hamburgerMenu && hamburgerMenu.getAttribute("aria-expanded") === "true") {
-          hamburgerMenu.click();
-        }
+        closeSidebar();
       });
     }
 
     if (hamburgerMenu) {
-      hamburgerMenu.addEventListener("click", function () {
-        window.requestAnimationFrame(syncMobileSidebarState);
-      });
+      hamburgerMenu.addEventListener("click", function (event) {
+        if (!mobileQuery.matches) {
+          return;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        toggleSidebar();
+      }, true);
     }
 
     if (mobileQuery.addEventListener) {
-      mobileQuery.addEventListener("change", syncMobileSidebarState);
+      mobileQuery.addEventListener("change", function () {
+        if (!mobileQuery.matches) {
+          closeSidebar();
+        }
+        syncMobileSidebarState();
+      });
     }
+    closeSidebar();
     syncMobileSidebarState();
 
     const triggers = document.querySelectorAll(".hextra-sidebar-section-trigger");

@@ -8,30 +8,26 @@
 {{- template "book-pager-collect" (dict "page" $root "scratch" $scratch) -}}
 
 {{- $entries := $scratch.Get "entries" -}}
-{{- $currentIndex := -1 -}}
-{{- range $index, $entry := $entries -}}
-  {{- $page := index $entry "page" -}}
-  {{- if eq $page.RelPermalink $.RelPermalink -}}
-    {{- $currentIndex = $index -}}
-  {{- end -}}
-{{- end -}}
-
 {{- $prev := false -}}
 {{- $next := false -}}
-{{- if ge $currentIndex 0 -}}
-  {{- range seq (sub $currentIndex 1) -1 0 -}}
-    {{- $entry := index $entries . -}}
-    {{- if index $entry "target" -}}
-      {{- $prev = index $entry "page" -}}
-      {{- break -}}
-    {{- end -}}
+{{- $seenCurrent := false -}}
+{{- range $entry := $entries -}}
+  {{- $page := index $entry "page" -}}
+  {{- $isTarget := index $entry "target" -}}
+  {{- $isCurrent := eq $page.RelPermalink $.RelPermalink -}}
+
+  {{- if and (not $seenCurrent) $isTarget (not $isCurrent) -}}
+    {{- $prev = $page -}}
   {{- end -}}
-  {{- range seq (add $currentIndex 1) (sub (len $entries) 1) -}}
-    {{- $entry := index $entries . -}}
-    {{- if index $entry "target" -}}
-      {{- $next = index $entry "page" -}}
-      {{- break -}}
-    {{- end -}}
+
+  {{- if $isCurrent -}}
+    {{- $seenCurrent = true -}}
+    {{- continue -}}
+  {{- end -}}
+
+  {{- if and $seenCurrent $isTarget (not $next) -}}
+    {{- $next = $page -}}
+    {{- break -}}
   {{- end -}}
 {{- end -}}
 
