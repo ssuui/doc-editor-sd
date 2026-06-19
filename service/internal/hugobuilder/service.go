@@ -373,7 +373,6 @@ func (s *Service) generateBooksPage(sourceRoot string, title string) (string, er
 
 	return strings.Join(lines, "\n"), nil
 }
-
 func (s *Service) booksPageTitle() string {
 	if strings.TrimSpace(s.siteCfg.BooksPageTitle) != "" {
 		return strings.TrimSpace(s.siteCfg.BooksPageTitle)

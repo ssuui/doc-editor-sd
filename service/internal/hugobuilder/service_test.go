@@ -93,13 +93,13 @@ func TestBuildSidebarWeightsAlignsLeafPagesWithSectionOrder(t *testing.T) {
 func TestPrepareMarkdownTreeAssignsLeafWeightsFromSidebarOrder(t *testing.T) {
 	contentDir := t.TempDir()
 	files := map[string]string{
-		"_index.md":                    "---\ntitle: 根\n---\n",
-		"02-review/_index.md":         "---\ntitle: 评审\n---\n",
-		"02-review/checklist.md":      "# 评审清单\n",
-		"01-setup/_index.md":          "---\ntitle: 环境\n---\n",
-		"01-setup/start.md":           "# 本地启动\n",
-		"03-flow/_index.md":           "---\ntitle: 流程\n---\n",
-		"03-flow/commit.md":           "# 提交流程\n",
+		"_index.md":              "---\ntitle: 根\n---\n",
+		"02-review/_index.md":    "---\ntitle: 评审\n---\n",
+		"02-review/checklist.md": "# 评审清单\n",
+		"01-setup/_index.md":     "---\ntitle: 环境\n---\n",
+		"01-setup/start.md":      "# 本地启动\n",
+		"03-flow/_index.md":      "---\ntitle: 流程\n---\n",
+		"03-flow/commit.md":      "# 提交流程\n",
 	}
 	for rel, content := range files {
 		path := filepath.Join(contentDir, filepath.FromSlash(rel))
@@ -216,5 +216,38 @@ func TestGenerateBooksPageHidesRenderedTitle(t *testing.T) {
 	}
 	if !strings.Contains(output, "books-page-search-input") {
 		t.Fatalf("expected generated books page to include a search box, got:\n%s", output)
+	}
+}
+
+func TestGenerateBooksPageLinksToBookHome(t *testing.T) {
+	sourceRoot := t.TempDir()
+	booksMeta := []byte("book_list:\n  - book_dir_name: b-a\n    weight: 10\n")
+	if err := os.WriteFile(filepath.Join(sourceRoot, "_books_meta.yaml"), booksMeta, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(sourceRoot, "b-a"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bookMeta := []byte(strings.Join([]string{
+		"display_name: 示例文档",
+		"description: 说明",
+		"version: v1",
+		"sidebar_order:",
+		"  - 01-section/_index.md",
+		"  - 01-section/01-copyright.md",
+		"  - 01-section/02-chapter-1-start.md",
+	}, "\n"))
+	if err := os.WriteFile(filepath.Join(sourceRoot, "b-a", "book_meta.yaml"), bookMeta, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := &Service{siteCfg: &configloader.SiteGlobalConfig{}}
+	output, err := svc.generateBooksPage(sourceRoot, "全部书籍")
+	if err != nil {
+		t.Fatalf("generateBooksPage failed: %v", err)
+	}
+
+	if !strings.Contains(output, "href=\"/b-a/index.html\"") {
+		t.Fatalf("expected generated books page to link to book home, got:\n%s", output)
 	}
 }

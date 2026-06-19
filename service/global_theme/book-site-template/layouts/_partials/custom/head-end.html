@@ -1,0 +1,38 @@
+{{- $pageTitle := partial "utils/title" . -}}
+{{- $bookTitle := .Site.Title -}}
+{{- $directoryTitle := "" -}}
+{{- $directoryPage := false -}}
+{{- if .IsSection -}}
+  {{- with .Parent -}}
+    {{- if not .IsHome -}}
+      {{- $directoryPage = . -}}
+    {{- end -}}
+  {{- end -}}
+{{- else -}}
+  {{- with .CurrentSection -}}
+    {{- if not .IsHome -}}
+      {{- $directoryPage = . -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- with $directoryPage -}}
+  {{- $directoryTitle = partial "utils/title" . -}}
+{{- end -}}
+{{- $meta := dict
+  "pageTitle" $pageTitle
+  "bookTitle" $bookTitle
+  "directoryTitle" $directoryTitle
+  "trackHistory" (not .IsHome)
+  "breadcrumb" (delimit (slice $bookTitle $directoryTitle $pageTitle) " / ")
+-}}
+<script>
+  window.__BOOK_PAGE_META = {{ $meta | jsonify | safeJS }};
+  (function () {
+    var meta = window.__BOOK_PAGE_META || {};
+    var parts = [];
+    if (meta.pageTitle) parts.push(meta.pageTitle);
+    if (meta.directoryTitle && meta.directoryTitle !== meta.pageTitle) parts.push(meta.directoryTitle);
+    if (meta.bookTitle && meta.bookTitle !== meta.pageTitle && meta.bookTitle !== meta.directoryTitle) parts.push(meta.bookTitle);
+    if (parts.length) document.title = parts.join(" - ");
+  })();
+</script>

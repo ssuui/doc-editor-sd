@@ -15,8 +15,8 @@
             {{- partial "utils/icon.html" (dict "name" "hamburger-menu" "attributes" "class=\"hx:h-5 hx:w-5\"") -}}
           </button>
         </div>
+        {{ partial "custom/page-meta.html" . }}
         {{ partial "breadcrumb.html" (dict "page" . "enable" true) }}
-        <div id="hextra-reading-resume-banner" class="hx:mb-4 hx:hidden"></div>
         <div class="content">
           {{ if and .Title (not (.Params.hideTitle | default false)) }}
             <div class="hx:flex hx:flex-col hx:sm:flex-row hx:items-start hx:sm:items-center hx:sm:justify-between hx:gap-4 hx:mb-4">

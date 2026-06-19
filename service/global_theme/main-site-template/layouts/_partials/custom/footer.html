@@ -23,3 +23,148 @@
     {{- end -}}
   </div>
 {{- end -}}
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const storageKey = "hextra-reading-history-v1";
+    const sidebarRoot = document.getElementById("hextra-reading-history-sidebar");
+    const titleParts = [document.querySelector("main#content h1")?.textContent || "", document.title || ""];
+
+    const getCanonicalPath = function (value) {
+      const url = new URL(value, window.location.origin);
+      url.searchParams.delete("resume");
+      return url.pathname + (url.search ? url.search : "");
+    };
+
+    const escapeHtml = function (value) {
+      return String(value || "").replace(/[&<>"']/g, function (char) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[char];
+      });
+    };
+
+    const getQueryLabel = function () {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("resume");
+      const pairs = [];
+      url.searchParams.forEach(function (value, key) {
+        pairs.push(value ? key + "=" + value : key);
+      });
+      return pairs.join("&");
+    };
+
+    const updateDocumentTitle = function () {
+      const baseTitle = titleParts[0] || titleParts[1];
+      const queryLabel = getQueryLabel();
+      if (!baseTitle) {
+        return;
+      }
+      document.title = queryLabel ? baseTitle + " [" + queryLabel + "]" : baseTitle;
+    };
+
+    const readRecords = function () {
+      try {
+        const raw = localStorage.getItem(storageKey);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (error) {
+        return [];
+      }
+    };
+
+    const formatTime = function (value) {
+      if (!value) {
+        return "";
+      }
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return "";
+      }
+      return date.toLocaleString("zh-CN", {
+        month: "numeric",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    };
+
+    const getContext = function (record) {
+      const parts = [];
+      if (record.bookTitle) {
+        parts.push("书籍: " + record.bookTitle);
+      }
+      if (record.directoryTitle || record.sectionTitle) {
+        parts.push("目录: " + (record.directoryTitle || record.sectionTitle));
+      }
+      if (record.queryLabel) {
+        parts.push("参数: " + record.queryLabel);
+      }
+      return parts.join(" / ");
+    };
+
+    const renderSidebar = function () {
+      if (!sidebarRoot) {
+        return;
+      }
+      const records = readRecords().filter(function (item) {
+        return item && item.path;
+      }).slice(0, 8);
+
+      if (!records.length) {
+        sidebarRoot.classList.add("hx:hidden");
+        sidebarRoot.innerHTML = "";
+        return;
+      }
+
+      sidebarRoot.classList.remove("hx:hidden");
+      sidebarRoot.innerHTML = [
+        '<div class="main-reading-history__header">',
+        '  <strong class="main-reading-history__title">浏览记录</strong>',
+        '  <button type="button" class="main-reading-history__clear">清空</button>',
+        '</div>',
+        '<div class="main-reading-history__list">',
+        records.map(function (item) {
+          const context = getContext(item);
+          const meta = [(item.progress || 0) + "%", formatTime(item.updatedAt)].filter(Boolean).join(" · ");
+          return [
+            '<button type="button" class="main-reading-history__item" data-path="', escapeHtml(item.path), '">',
+            '  <span class="main-reading-history__item-body">',
+            '    <span class="main-reading-history__item-top">',
+            '      <span class="main-reading-history__item-title">', escapeHtml(item.title || item.path), '</span>',
+            '      <span class="main-reading-history__item-meta">', escapeHtml(meta), '</span>',
+            '    </span>',
+            context ? '    <span class="main-reading-history__item-context">' + escapeHtml(context) + '</span>' : '',
+            '  </span>',
+            '</button>'
+          ].join("");
+        }).join(""),
+        '</div>'
+      ].join("");
+
+      sidebarRoot.querySelectorAll("[data-path]").forEach(function (button) {
+        button.addEventListener("click", function () {
+          const targetPath = button.getAttribute("data-path");
+          const record = records.find(function (item) {
+            return item.path === targetPath;
+          });
+          if (!record) {
+            return;
+          }
+          const target = new URL(record.path, window.location.origin);
+          target.searchParams.set("resume", String(record.scrollTop || 0));
+          window.location.href = target.toString();
+        });
+      });
+
+      const clearButton = sidebarRoot.querySelector(".main-reading-history__clear");
+      if (clearButton) {
+        clearButton.addEventListener("click", function () {
+          localStorage.removeItem(storageKey);
+          renderSidebar();
+        });
+      }
+    };
+
+    updateDocumentTitle();
+    renderSidebar();
+  });
+</script>

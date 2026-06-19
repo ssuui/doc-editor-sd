@@ -5,20 +5,10 @@
     <article class="hx:w-full hx:break-words hx:flex hx:min-h-[calc(100vh-var(--hextra-navbar-height))] hx:min-w-0 hx:justify-center hx:pb-8 hx:pr-[calc(env(safe-area-inset-right)-1.5rem)]">
       <main id="content" class="hx:w-full hx:min-w-0 hextra-max-content-width hx:px-6 hx:pt-4 hx:md:px-12">
         {{ partial "custom/page-begin.html" . }}
-        <div class="hx:mb-4 hx:flex hx:md:hidden">
-          <button
-            type="button"
-            class="hextra-mobile-sidebar-toggle hx:inline-flex hx:h-10 hx:w-10 hx:items-center hx:justify-center hx:rounded-md hx:border hx:border-gray-200 hx:bg-white hx:text-gray-700 hx:shadow-sm hx:transition-colors hx:hover:bg-gray-100 hx:dark:border-neutral-800 hx:dark:bg-neutral-900 hx:dark:text-gray-200 hx:dark:hover:bg-neutral-800"
-            aria-label="打开目录"
-            title="打开目录"
-          >
-            {{- partial "utils/icon.html" (dict "name" "hamburger-menu" "attributes" "class=\"hx:h-5 hx:w-5\"") -}}
-          </button>
-        </div>
         {{ partial "custom/page-meta.html" . }}
         {{ partial "breadcrumb.html" (dict "page" . "enable" true) }}
         <div class="content">
-          {{ if and .Title (not (.Params.hideTitle | default false)) }}
+          {{ if .Title }}
             <div class="hx:flex hx:flex-col hx:sm:flex-row hx:items-start hx:sm:items-center hx:sm:justify-between hx:gap-4 hx:mb-4">
               <h1 class="hx:mb-0">{{ .Title }}</h1>
               {{ partial "components/page-context-menu" . }}
@@ -26,7 +16,6 @@
           {{ end }}
           {{ partial "custom/content-begin.html" . }}
           {{ .Content }}
-          {{ if .IsHome }}{{ partial "book-home-redirect.html" . }}{{ end }}
           {{ partial "custom/content-end.html" . }}
         </div>
         {{ partial "components/last-updated.html" . }}

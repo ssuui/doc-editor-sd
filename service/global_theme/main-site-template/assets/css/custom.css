@@ -123,3 +123,110 @@
   margin-top: 1rem;
   color: #64748b;
 }
+
+.main-reading-history {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.main-reading-history__header,
+.main-reading-history__item-body {
+  display: flex;
+  min-width: 0;
+}
+
+.main-reading-history__header {
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.main-reading-history__title {
+  color: #0f172a;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.main-reading-history__clear {
+  padding: 0.2rem 0.55rem;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #64748b;
+  cursor: pointer;
+  font-size: 0.76rem;
+}
+
+.main-reading-history__list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.main-reading-history__item {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.72rem 0.8rem;
+  border: 0;
+  border-radius: 0.9rem;
+  background: rgba(248, 250, 252, 0.95);
+  cursor: pointer;
+  text-align: left;
+  min-height: 4.9rem;
+}
+
+.main-reading-history__item-body {
+  flex-direction: column;
+}
+
+.main-reading-history__item-title {
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.main-reading-history__item-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.main-reading-history__item-context,
+.main-reading-history__item-meta {
+  color: #64748b;
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+
+.main-reading-history__item-context {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.main-reading-history__item-meta {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.dark .main-reading-history__title,
+.dark .main-reading-history__item-title {
+  color: #e2e8f0;
+}
+
+.dark .main-reading-history__clear,
+.dark .main-reading-history__item,
+.dark .main-reading-history__item-meta,
+.dark .main-reading-history__item-context {
+  color: #94a3b8;
+  background: rgba(30, 41, 59, 0.9);
+}

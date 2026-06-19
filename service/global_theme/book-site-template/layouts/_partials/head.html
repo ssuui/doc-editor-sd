@@ -1,0 +1,97 @@
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  {{- $noindex := .Params.noindex | default false -}}
+  {{ if and (hugo.IsProduction) (not $noindex) -}}
+    <meta name="robots" content="index, follow" />
+  {{ else -}}
+    <meta name="robots" content="noindex, nofollow" />
+  {{ end -}}
+  {{ partialCached "favicons.html" . -}}
+
+  {{- $pageTitle := partial "utils/title" . -}}
+  {{- $bookTitle := .Site.Title -}}
+  {{- $directoryTitle := "" -}}
+  {{- $directoryPage := false -}}
+  {{- if .IsSection -}}
+    {{- with .Parent -}}
+      {{- if not .IsHome -}}
+        {{- $directoryPage = . -}}
+      {{- end -}}
+    {{- end -}}
+  {{- else -}}
+    {{- with .CurrentSection -}}
+      {{- if not .IsHome -}}
+        {{- $directoryPage = . -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+  {{- with $directoryPage -}}
+    {{- $directoryTitle = partial "utils/title" . -}}
+  {{- end -}}
+  {{- $titleParts := slice -}}
+  {{- if $pageTitle -}}{{- $titleParts = $titleParts | append $pageTitle -}}{{- end -}}
+  {{- if and $directoryTitle (ne $directoryTitle $pageTitle) -}}
+    {{- $titleParts = $titleParts | append $directoryTitle -}}
+  {{- end -}}
+  {{- if and $bookTitle (ne $bookTitle $pageTitle) (ne $bookTitle $directoryTitle) -}}
+    {{- $titleParts = $titleParts | append $bookTitle -}}
+  {{- end -}}
+  <title>{{ if gt (len $titleParts) 0 }}{{ delimit $titleParts " - " }}{{ else }}{{ .Site.Title }}{{ end }}</title>
+
+  <meta name="description" content="{{ partial "utils/page-description.html" . }}" />
+
+  {{- with .Params.canonical -}}
+    <link rel="canonical" href="{{ . }}" itemprop="url" />
+  {{- else -}}
+    <link rel="canonical" href="{{ .Permalink }}" itemprop="url" />
+  {{- end -}}
+
+  {{- partial "opengraph.html" . -}}
+  {{- partial "schema.html" . -}}
+  {{- partial "twitter_cards.html" . -}}
+
+  {{- $mainCss := resources.Get "css/compiled/main.css" -}}
+  {{- $customCss := resources.Get "css/custom.css" -}}
+  {{- $variablesCss := resources.Get "css/variables.css" | resources.ExecuteAsTemplate "css/variables.css" . -}}
+
+  {{- if hugo.IsProduction }}
+    {{- $styles := slice $variablesCss $mainCss $customCss | resources.Concat "css/compiled/main.css" | minify | fingerprint }}
+    <link rel="preload" href="{{ $styles.RelPermalink }}" as="style" integrity="{{ $styles.Data.Integrity }}" />
+    <link href="{{ $styles.RelPermalink }}" rel="stylesheet" integrity="{{ $styles.Data.Integrity }}" />
+  {{- else if eq hugo.Environment "theme" }}
+    {{- $devStyles := resources.Get "css/styles.css" | postCSS (dict "inlineImports" true) }}
+    <link href="{{ $devStyles.RelPermalink }}" rel="stylesheet" />
+    <link href="{{ $variablesCss.RelPermalink }}" rel="stylesheet" />
+    <link href="{{ $customCss.RelPermalink }}" rel="stylesheet" />
+  {{- else }}
+    {{- $styles := resources.Get "css/compiled/main.css" -}}
+    <link href="{{ $styles.RelPermalink }}" rel="stylesheet" />
+    <link href="{{ $variablesCss.RelPermalink }}" rel="stylesheet" />
+    <link href="{{ $customCss.RelPermalink }}" rel="stylesheet" />
+  {{- end }}
+
+  {{ partial "components/analytics/analytics.html" . }}
+
+  {{- $scriptsHead := slice -}}
+  {{- range resources.Match "js/head/*.js" -}}
+    {{ $scriptsHead = $scriptsHead | append (resources.ExecuteAsTemplate .Name $ .) }}
+  {{- end -}}
+
+  {{- $scripts := $scriptsHead | resources.Concat "js/main-head.js" -}}
+  {{- if hugo.IsProduction -}}
+    {{- $scripts = $scripts | minify | fingerprint -}}
+  {{- end -}}
+  <script src="{{ $scripts.RelPermalink }}" integrity="{{ $scripts.Data.Integrity }}"></script>
+
+  {{ $noop := .WordCount -}}
+  {{- $engine := site.Params.math.engine | default "katex" -}}
+  {{ if and (.Page.Store.Get "hasMath") (eq $engine "katex") -}}
+    {{ partialCached "scripts/katex.html" . -}}
+  {{ else if and (.Page.Store.Get "hasMath") (eq $engine "mathjax") -}}
+    {{ partialCached "scripts/mathjax.html" . -}}
+  {{ end -}}
+
+  {{ partial "utils/page-width-override.html" . }}
+  {{ partial "custom/head-end.html" . -}}
+</head>

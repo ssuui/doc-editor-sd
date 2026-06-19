@@ -1,0 +1,36 @@
+{{- $pageTitle := partial "utils/title" . -}}
+{{- $bookTitle := .Site.Title -}}
+{{- $directoryTitle := "" -}}
+{{- $directoryPage := false -}}
+{{- if .IsSection -}}
+  {{- with .Parent -}}
+    {{- if not .IsHome -}}
+      {{- $directoryPage = . -}}
+    {{- end -}}
+  {{- end -}}
+{{- else -}}
+  {{- with .CurrentSection -}}
+    {{- if not .IsHome -}}
+      {{- $directoryPage = . -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- with $directoryPage -}}
+  {{- $directoryTitle = partial "utils/title" . -}}
+{{- end -}}
+{{- $crumbs := slice -}}
+{{- if $bookTitle -}}{{- $crumbs = $crumbs | append $bookTitle -}}{{- end -}}
+{{- if $directoryTitle -}}{{- $crumbs = $crumbs | append $directoryTitle -}}{{- end -}}
+{{- if $pageTitle -}}{{- $crumbs = $crumbs | append $pageTitle -}}{{- end -}}
+
+<div
+  id="hextra-page-meta"
+  class="hx:hidden"
+  data-track-history="{{ if .IsHome }}false{{ else }}true{{ end }}"
+  data-page-title="{{ $pageTitle | htmlEscape }}"
+  data-book-title="{{ $bookTitle | htmlEscape }}"
+  data-directory-title="{{ $directoryTitle | htmlEscape }}"
+  data-section-title="{{ $directoryTitle | htmlEscape }}"
+  data-breadcrumb="{{ delimit $crumbs " / " | htmlEscape }}"
+  data-site-title="{{ .Site.Title | htmlEscape }}"
+></div>

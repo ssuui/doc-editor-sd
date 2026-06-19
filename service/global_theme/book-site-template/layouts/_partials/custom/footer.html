@@ -30,15 +30,112 @@
   document.addEventListener("DOMContentLoaded", function () {
     const storageKey = "hextra-reading-history-v1";
     const dockPositionKey = "hextra-reading-dock-position-v1";
-    const maxRecords = 5;
-    const path = window.location.pathname + window.location.search;
+    const maxRecords = 12;
+    const dockRecordLimit = 5;
+    const sidebarRecordLimit = 8;
     const content = document.getElementById("content");
     const dockRoot = document.getElementById("hextra-reading-history-dock");
-    const resumeBanner = document.getElementById("hextra-reading-resume-banner");
+    const sidebarRoot = document.getElementById("hextra-reading-history-sidebar");
+    const pageMeta = document.getElementById("hextra-page-meta");
 
-    if (!content) {
+    if (!content && !dockRoot && !sidebarRoot) {
       return;
     }
+
+    const getCanonicalPath = function (value) {
+      const url = new URL(value, window.location.origin);
+      url.searchParams.delete("resume");
+      return url.pathname + (url.search ? url.search : "");
+    };
+
+    const path = getCanonicalPath(window.location.href);
+
+    const escapeHtml = function (value) {
+      return String(value || "").replace(/[&<>"']/g, function (char) {
+        return {
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          "\"": "&quot;",
+          "'": "&#39;"
+        }[char];
+      });
+    };
+
+    const getQueryLabelFromPath = function (value) {
+      try {
+        const url = new URL(value, window.location.origin);
+        url.searchParams.delete("resume");
+        const labels = [];
+        url.searchParams.forEach(function (paramValue, key) {
+          labels.push(paramValue ? key + "=" + paramValue : key);
+        });
+        return labels.join("&");
+      } catch (error) {
+        return "";
+      }
+    };
+
+    const getCurrentPageMeta = function () {
+      const globalMeta = window.__BOOK_PAGE_META || {};
+      const heading = document.querySelector("main#content h1");
+      const title = (globalMeta.pageTitle || pageMeta?.dataset.pageTitle || (heading ? heading.textContent : document.title) || "").trim();
+      const bookTitle = (globalMeta.bookTitle || pageMeta?.dataset.bookTitle || "").trim();
+      const directoryTitle = (globalMeta.directoryTitle || pageMeta?.dataset.directoryTitle || pageMeta?.dataset.sectionTitle || "").trim();
+      const breadcrumb = (globalMeta.breadcrumb || pageMeta?.dataset.breadcrumb || "").trim();
+      const queryLabel = getQueryLabelFromPath(window.location.href);
+      return {
+        title: title,
+        bookTitle: bookTitle,
+        directoryTitle: directoryTitle,
+        breadcrumb: breadcrumb,
+        queryLabel: queryLabel,
+        trackHistory: typeof globalMeta.trackHistory === "boolean" ? globalMeta.trackHistory : (pageMeta ? pageMeta.dataset.trackHistory !== "false" : true)
+      };
+    };
+
+    const dedupeText = function (values) {
+      const result = [];
+      values.forEach(function (value) {
+        const next = String(value || "").trim();
+        if (!next || result.indexOf(next) >= 0) {
+          return;
+        }
+        result.push(next);
+      });
+      return result;
+    };
+
+    const updateDocumentTitle = function () {
+      const meta = getCurrentPageMeta();
+      const pieces = dedupeText([meta.title, meta.directoryTitle, meta.bookTitle]);
+      if (pieces.length === 0) {
+        return;
+      }
+      document.title = pieces.join(" - ") + (meta.queryLabel ? " [" + meta.queryLabel + "]" : "");
+    };
+
+    updateDocumentTitle();
+
+    const normalizeRecord = function (item) {
+      if (!item || !item.path) {
+        return null;
+      }
+      const normalizedPath = getCanonicalPath(item.path);
+      const scrollTop = Number(item.scrollTop);
+      const progress = Number(item.progress);
+      return {
+        path: normalizedPath,
+        title: String(item.title || "").trim(),
+        bookTitle: String(item.bookTitle || "").trim(),
+        directoryTitle: String(item.directoryTitle || item.sectionTitle || "").trim(),
+        breadcrumb: String(item.breadcrumb || "").trim(),
+        queryLabel: String(item.queryLabel || getQueryLabelFromPath(normalizedPath)).trim(),
+        scrollTop: Number.isFinite(scrollTop) ? Math.max(Math.round(scrollTop), 0) : 0,
+        progress: Number.isFinite(progress) ? Math.max(Math.min(Math.round(progress), 100), 0) : 0,
+        updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : ""
+      };
+    };
 
     const readRecords = function () {
       try {
@@ -47,7 +144,10 @@
           return [];
         }
         const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : [];
+        if (!Array.isArray(parsed)) {
+          return [];
+        }
+        return parsed.map(normalizeRecord).filter(Boolean);
       } catch (error) {
         return [];
       }
@@ -55,7 +155,7 @@
 
     const writeRecords = function (records) {
       try {
-        localStorage.setItem(storageKey, JSON.stringify(records.slice(0, maxRecords)));
+        localStorage.setItem(storageKey, JSON.stringify(records.map(normalizeRecord).filter(Boolean).slice(0, maxRecords)));
       } catch (error) {
       }
     };
@@ -72,28 +172,30 @@
       };
     };
 
-    const getTitle = function () {
-      const heading = document.querySelector("main#content h1");
-      return (heading ? heading.textContent : document.title).trim();
-    };
-
     const upsertRecord = function () {
+      const meta = getCurrentPageMeta();
+      if (!meta.trackHistory) {
+        return;
+      }
       const metrics = getScrollMetrics();
-      const title = getTitle();
       const records = readRecords().filter(function (item) {
         return item && item.path !== path;
       });
 
       records.unshift({
         path: path,
-        title: title,
+        title: meta.title,
+        bookTitle: meta.bookTitle,
+        directoryTitle: meta.directoryTitle,
+        breadcrumb: meta.breadcrumb,
+        queryLabel: meta.queryLabel,
         scrollTop: metrics.scrollTop,
         progress: metrics.progress,
         updatedAt: new Date().toISOString()
       });
 
       writeRecords(records);
-      renderHistoryDock(records);
+      renderAllHistory(records);
     };
 
     const formatTime = function (value) {
@@ -118,6 +220,46 @@
       window.location.href = target.toString();
     };
 
+    const getRecordContext = function (record) {
+      const parts = [];
+      if (record.bookTitle) {
+        parts.push("书籍: " + record.bookTitle);
+      }
+      if (record.directoryTitle) {
+        parts.push("目录: " + record.directoryTitle);
+      }
+      if (record.queryLabel) {
+        parts.push("参数: " + record.queryLabel);
+      }
+      return parts.join(" / ");
+    };
+
+    const renderRecordButtons = function (root, records) {
+      root.querySelectorAll("[data-path]").forEach(function (button) {
+        button.addEventListener("click", function () {
+          const record = records.find(function (item) {
+            return item.path === button.getAttribute("data-path");
+          });
+          if (record) {
+            goToRecord(record);
+          }
+        });
+      });
+    };
+
+    const clearHistory = function () {
+      localStorage.removeItem(storageKey);
+      localStorage.removeItem(dockPositionKey);
+      renderAllHistory([]);
+    };
+
+    const bindClearButton = function (root, selector) {
+      const button = root.querySelector(selector);
+      if (button) {
+        button.addEventListener("click", clearHistory);
+      }
+    };
+
     const renderHistoryDock = function (records) {
       if (!dockRoot) {
         return;
@@ -125,7 +267,7 @@
 
       const visibleRecords = records.filter(function (item) {
         return item && item.path;
-      }).slice(0, maxRecords);
+      }).slice(0, dockRecordLimit);
 
       if (visibleRecords.length === 0) {
         dockRoot.classList.add("hx:hidden");
@@ -143,10 +285,16 @@
         '  </div>',
         '  <div class="hextra-reading-dock__list">',
         visibleRecords.map(function (item) {
+          const context = getRecordContext(item);
           return [
             '<button type="button" class="hextra-reading-dock__item" data-path="', item.path, '">',
-            '  <span class="hextra-reading-dock__item-title">', item.title || item.path, '</span>',
-            '  <span class="hextra-reading-dock__item-meta">', (item.progress || 0), '%</span>',
+            '  <span class="hextra-reading-dock__item-body">',
+            '    <span class="hextra-reading-dock__item-top">',
+            '      <span class="hextra-reading-dock__item-title">', escapeHtml(item.title || item.path), '</span>',
+            '      <span class="hextra-reading-dock__item-meta">', (item.progress || 0), '%</span>',
+            '    </span>',
+            context ? '    <span class="hextra-reading-dock__item-context">' + escapeHtml(context) + '</span>' : '',
+            '  </span>',
             '</button>'
           ].join("");
         }).join(""),
@@ -192,31 +340,8 @@
         });
       }
 
-      dockRoot.querySelectorAll("[data-path]").forEach(function (button) {
-        button.addEventListener("click", function () {
-          const record = visibleRecords.find(function (item) {
-            return item.path === button.getAttribute("data-path");
-          });
-          if (record) {
-            goToRecord(record);
-          }
-        });
-      });
-
-      const clearButton = dockRoot.querySelector(".hextra-reading-dock__clear");
-      if (clearButton) {
-        clearButton.addEventListener("click", function () {
-          localStorage.removeItem(storageKey);
-          localStorage.removeItem(dockPositionKey);
-          closeDock();
-          dockRoot.classList.add("hx:hidden");
-          dockRoot.innerHTML = "";
-          if (resumeBanner) {
-            resumeBanner.classList.add("hx:hidden");
-            resumeBanner.innerHTML = "";
-          }
-        });
-      }
+      renderRecordButtons(dockRoot, visibleRecords);
+      bindClearButton(dockRoot, ".hextra-reading-dock__clear");
 
       const savedPosition = (function () {
         try {
@@ -331,44 +456,53 @@
 
     };
 
-    const renderResumeBanner = function (record) {
-      if (!resumeBanner || !record || !record.scrollTop || record.scrollTop < 80) {
-        if (resumeBanner) {
-          resumeBanner.classList.add("hx:hidden");
-          resumeBanner.innerHTML = "";
-        }
+    const renderHistorySidebar = function (records) {
+      if (!sidebarRoot) {
         return;
       }
 
-      resumeBanner.classList.remove("hx:hidden");
-      resumeBanner.innerHTML = [
-        '<div class="hextra-reading-resume">',
-        '  <div class="hextra-reading-resume__body">',
-        '    <strong class="hextra-reading-resume__title">继续阅读</strong>',
-        '    <span class="hextra-reading-resume__meta">上次读到 ', (record.progress || 0), '%', (record.updatedAt ? ' · ' + formatTime(record.updatedAt) : ''), '</span>',
-        '  </div>',
-        '  <div class="hextra-reading-resume__actions">',
-        '    <button type="button" class="hextra-reading-resume__button" data-action="resume">继续</button>',
-        '    <button type="button" class="hextra-reading-resume__button is-secondary" data-action="reset">从顶部开始</button>',
-        '  </div>',
+      const visibleRecords = records.filter(function (item) {
+        return item && item.path;
+      }).slice(0, sidebarRecordLimit);
+
+      if (visibleRecords.length === 0) {
+        sidebarRoot.classList.add("hx:hidden");
+        sidebarRoot.innerHTML = "";
+        return;
+      }
+
+      sidebarRoot.classList.remove("hx:hidden");
+      sidebarRoot.innerHTML = [
+        '<div class="hextra-reading-history-sidebar__header">',
+        '  <strong class="hextra-reading-history-sidebar__title">浏览记录</strong>',
+        '  <button type="button" class="hextra-reading-history-sidebar__clear">清空</button>',
+        '</div>',
+        '<div class="hextra-reading-history-sidebar__list">',
+        visibleRecords.map(function (item) {
+          const context = getRecordContext(item);
+          const metaText = [(item.progress || 0) + "%", formatTime(item.updatedAt)].filter(Boolean).join(" · ");
+          return [
+            '<button type="button" class="hextra-reading-history-sidebar__item" data-path="', item.path, '">',
+            '  <span class="hextra-reading-history-sidebar__item-body">',
+            '    <span class="hextra-reading-history-sidebar__item-top">',
+            '      <span class="hextra-reading-history-sidebar__item-title">', escapeHtml(item.title || item.path), '</span>',
+            '      <span class="hextra-reading-history-sidebar__item-meta">', escapeHtml(metaText), '</span>',
+            '    </span>',
+            context ? '    <span class="hextra-reading-history-sidebar__item-context">' + escapeHtml(context) + '</span>' : '',
+            '  </span>',
+            '</button>'
+          ].join("");
+        }).join(""),
         '</div>'
       ].join("");
 
-      resumeBanner.querySelector('[data-action="resume"]').addEventListener("click", function () {
-        window.scrollTo({ top: record.scrollTop, behavior: "smooth" });
-        resumeBanner.classList.add("hx:hidden");
-      });
+      renderRecordButtons(sidebarRoot, visibleRecords);
+      bindClearButton(sidebarRoot, ".hextra-reading-history-sidebar__clear");
+    };
 
-      resumeBanner.querySelector('[data-action="reset"]').addEventListener("click", function () {
-        const records = readRecords().map(function (item) {
-          if (item.path === path) {
-            return Object.assign({}, item, { scrollTop: 0, progress: 0, updatedAt: new Date().toISOString() });
-          }
-          return item;
-        });
-        writeRecords(records);
-        resumeBanner.classList.add("hx:hidden");
-      });
+    const renderAllHistory = function (records) {
+      renderHistoryDock(records);
+      renderHistorySidebar(records);
     };
 
     const applyResumeFromQuery = function () {
@@ -395,14 +529,8 @@
     };
 
     const records = readRecords();
-    const currentRecord = records.find(function (item) {
-      return item && item.path === path;
-    });
-
-    renderHistoryDock(records);
-    if (!applyResumeFromQuery()) {
-      renderResumeBanner(currentRecord);
-    }
+    renderAllHistory(records);
+    applyResumeFromQuery();
 
     scheduleSave();
     window.addEventListener("scroll", scheduleSave, { passive: true });

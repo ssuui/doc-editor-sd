@@ -1,41 +1,9 @@
-{{/* Article navigation that skips section index pages as targets but keeps their child pages in reading order. */}}
+{{/* Article navigation on the footer of the article */}}
 
 {{- $reversePagination := .Store.Get "reversePagination" | default false -}}
-{{- $root := .FirstSection | default .CurrentSection | default .Site.Home -}}
-{{- $scratch := newScratch -}}
-{{- $scratch.Set "entries" (slice) -}}
 
-{{- template "book-pager-collect" (dict "page" $root "scratch" $scratch) -}}
-
-{{- $entries := $scratch.Get "entries" -}}
-{{- $prev := false -}}
-{{- $next := false -}}
-{{- $seenCurrent := false -}}
-{{- range $entry := $entries -}}
-  {{- $page := index $entry "page" -}}
-  {{- $isTarget := index $entry "target" -}}
-  {{- $isCurrent := eq $page.RelPermalink $.RelPermalink -}}
-
-  {{- if and (not $seenCurrent) $isTarget (not $isCurrent) -}}
-    {{- $prev = $page -}}
-  {{- end -}}
-
-  {{- if $isCurrent -}}
-    {{- $seenCurrent = true -}}
-    {{- continue -}}
-  {{- end -}}
-
-  {{- if and $seenCurrent $isTarget (not $next) -}}
-    {{- $next = $page -}}
-    {{- break -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if $reversePagination -}}
-  {{- $swap := $prev -}}
-  {{- $prev = $next -}}
-  {{- $next = $swap -}}
-{{- end -}}
+{{- $prev := cond $reversePagination .PrevInSection .NextInSection -}}
+{{- $next := cond $reversePagination .NextInSection .PrevInSection -}}
 
 {{- if eq .Params.prev false }}
   {{- if $reversePagination }}{{ $next = false }}{{ else }}{{ $prev = false }}{{ end -}}
@@ -82,19 +50,4 @@
       </a>
     {{- end -}}
   </div>
-{{- end -}}
-
-{{- define "book-pager-collect" -}}
-  {{- $page := .page -}}
-  {{- $scratch := .scratch -}}
-  {{- if and $page (not $page.IsHome) (ne $page.Params.sidebar.exclude true) -}}
-    {{- $scratch.Add "entries" (slice (dict "page" $page "target" (not $page.IsSection))) -}}
-  {{- end -}}
-
-  {{- with $page -}}
-    {{- $children := where (union .Sections .RegularPages) "Params.sidebar.exclude" "!=" true -}}
-    {{- range $children.ByWeight -}}
-      {{- template "book-pager-collect" (dict "page" . "scratch" $scratch) -}}
-    {{- end -}}
-  {{- end -}}
 {{- end -}}
