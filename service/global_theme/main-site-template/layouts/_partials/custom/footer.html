@@ -27,7 +27,10 @@
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     const storageKey = "hextra-reading-history-v1";
-    const sidebarRoot = document.getElementById("hextra-reading-history-sidebar");
+    const historyRoots = [
+      document.getElementById("hextra-reading-history-sidebar"),
+      document.getElementById("hextra-reading-history-mobile")
+    ].filter(Boolean);
     const titleParts = [document.querySelector("main#content h1")?.textContent || "", document.title || ""];
 
     const getCanonicalPath = function (value) {
@@ -87,43 +90,35 @@
       });
     };
 
-    const getContext = function (record) {
-      const parts = [];
-      if (record.bookTitle) {
-        parts.push("书籍: " + record.bookTitle);
-      }
-      if (record.directoryTitle || record.sectionTitle) {
-        parts.push("目录: " + (record.directoryTitle || record.sectionTitle));
-      }
-      if (record.queryLabel) {
-        parts.push("参数: " + record.queryLabel);
-      }
-      return parts.join(" / ");
+    const getRecordDisplayText = function (value) {
+      const text = String(value || "").trim();
+      return text || "/";
     };
 
-    const renderSidebar = function () {
-      if (!sidebarRoot) {
+    const getRecordDetails = function (record) {
+      return {
+        bookTitle: getRecordDisplayText(record.bookTitle),
+        directoryTitle: getRecordDisplayText(record.directoryTitle || record.sectionTitle),
+        queryLabel: String(record.queryLabel || "").trim()
+      };
+    };
+
+    const renderHistory = function () {
+      if (!historyRoots.length) {
         return;
       }
       const records = readRecords().filter(function (item) {
         return item && item.path;
       }).slice(0, 8);
 
-      if (!records.length) {
-        sidebarRoot.classList.add("hx:hidden");
-        sidebarRoot.innerHTML = "";
-        return;
-      }
-
-      sidebarRoot.classList.remove("hx:hidden");
-      sidebarRoot.innerHTML = [
+      const html = [
         '<div class="main-reading-history__header">',
         '  <strong class="main-reading-history__title">浏览记录</strong>',
         '  <button type="button" class="main-reading-history__clear">清空</button>',
         '</div>',
         '<div class="main-reading-history__list">',
         records.map(function (item) {
-          const context = getContext(item);
+          const details = getRecordDetails(item);
           const meta = [(item.progress || 0) + "%", formatTime(item.updatedAt)].filter(Boolean).join(" · ");
           return [
             '<button type="button" class="main-reading-history__item" data-path="', escapeHtml(item.path), '">',
@@ -132,7 +127,11 @@
             '      <span class="main-reading-history__item-title">', escapeHtml(item.title || item.path), '</span>',
             '      <span class="main-reading-history__item-meta">', escapeHtml(meta), '</span>',
             '    </span>',
-            context ? '    <span class="main-reading-history__item-context">' + escapeHtml(context) + '</span>' : '',
+            '    <span class="main-reading-history__item-details">',
+            '      <span class="main-reading-history__item-detail"><span class="main-reading-history__item-label">书籍</span><span class="main-reading-history__item-value">', escapeHtml(details.bookTitle), '</span></span>',
+            '      <span class="main-reading-history__item-detail"><span class="main-reading-history__item-label">目录</span><span class="main-reading-history__item-value">', escapeHtml(details.directoryTitle), '</span></span>',
+            '    </span>',
+            details.queryLabel ? '    <span class="main-reading-history__item-context">参数: ' + escapeHtml(details.queryLabel) + '</span>' : '',
             '  </span>',
             '</button>'
           ].join("");
@@ -140,31 +139,42 @@
         '</div>'
       ].join("");
 
-      sidebarRoot.querySelectorAll("[data-path]").forEach(function (button) {
-        button.addEventListener("click", function () {
-          const targetPath = button.getAttribute("data-path");
-          const record = records.find(function (item) {
-            return item.path === targetPath;
-          });
-          if (!record) {
-            return;
-          }
-          const target = new URL(record.path, window.location.origin);
-          target.searchParams.set("resume", String(record.scrollTop || 0));
-          window.location.href = target.toString();
-        });
-      });
+      historyRoots.forEach(function (root) {
+        if (!records.length) {
+          root.classList.add("hx:hidden");
+          root.innerHTML = "";
+          return;
+        }
 
-      const clearButton = sidebarRoot.querySelector(".main-reading-history__clear");
-      if (clearButton) {
-        clearButton.addEventListener("click", function () {
-          localStorage.removeItem(storageKey);
-          renderSidebar();
+        root.classList.remove("hx:hidden");
+        root.innerHTML = html;
+
+        root.querySelectorAll("[data-path]").forEach(function (button) {
+          button.addEventListener("click", function () {
+            const targetPath = button.getAttribute("data-path");
+            const record = records.find(function (item) {
+              return item.path === targetPath;
+            });
+            if (!record) {
+              return;
+            }
+            const target = new URL(record.path, window.location.origin);
+            target.searchParams.set("resume", String(record.scrollTop || 0));
+            window.location.href = target.toString();
+          });
         });
-      }
+
+        const clearButton = root.querySelector(".main-reading-history__clear");
+        if (clearButton) {
+          clearButton.addEventListener("click", function () {
+            localStorage.removeItem(storageKey);
+            renderHistory();
+          });
+        }
+      });
     };
 
     updateDocumentTitle();
-    renderSidebar();
+    renderHistory();
   });
 </script>

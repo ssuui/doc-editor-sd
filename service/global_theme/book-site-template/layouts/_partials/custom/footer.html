@@ -220,18 +220,17 @@
       window.location.href = target.toString();
     };
 
-    const getRecordContext = function (record) {
-      const parts = [];
-      if (record.bookTitle) {
-        parts.push("书籍: " + record.bookTitle);
-      }
-      if (record.directoryTitle) {
-        parts.push("目录: " + record.directoryTitle);
-      }
-      if (record.queryLabel) {
-        parts.push("参数: " + record.queryLabel);
-      }
-      return parts.join(" / ");
+    const getRecordDisplayText = function (value) {
+      const text = String(value || "").trim();
+      return text || "/";
+    };
+
+    const getRecordDetails = function (record) {
+      return {
+        bookTitle: getRecordDisplayText(record.bookTitle),
+        directoryTitle: getRecordDisplayText(record.directoryTitle),
+        queryLabel: String(record.queryLabel || "").trim()
+      };
     };
 
     const renderRecordButtons = function (root, records) {
@@ -285,7 +284,7 @@
         '  </div>',
         '  <div class="hextra-reading-dock__list">',
         visibleRecords.map(function (item) {
-          const context = getRecordContext(item);
+          const details = getRecordDetails(item);
           return [
             '<button type="button" class="hextra-reading-dock__item" data-path="', item.path, '">',
             '  <span class="hextra-reading-dock__item-body">',
@@ -293,7 +292,11 @@
             '      <span class="hextra-reading-dock__item-title">', escapeHtml(item.title || item.path), '</span>',
             '      <span class="hextra-reading-dock__item-meta">', (item.progress || 0), '%</span>',
             '    </span>',
-            context ? '    <span class="hextra-reading-dock__item-context">' + escapeHtml(context) + '</span>' : '',
+            '    <span class="hextra-reading-dock__item-details">',
+            '      <span class="hextra-reading-dock__item-detail"><span class="hextra-reading-dock__item-label">书籍</span><span class="hextra-reading-dock__item-value">', escapeHtml(details.bookTitle), '</span></span>',
+            '      <span class="hextra-reading-dock__item-detail"><span class="hextra-reading-dock__item-label">目录</span><span class="hextra-reading-dock__item-value">', escapeHtml(details.directoryTitle), '</span></span>',
+            '    </span>',
+            details.queryLabel ? '    <span class="hextra-reading-dock__item-context">参数: ' + escapeHtml(details.queryLabel) + '</span>' : '',
             '  </span>',
             '</button>'
           ].join("");
@@ -479,7 +482,7 @@
         '</div>',
         '<div class="hextra-reading-history-sidebar__list">',
         visibleRecords.map(function (item) {
-          const context = getRecordContext(item);
+          const details = getRecordDetails(item);
           const metaText = [(item.progress || 0) + "%", formatTime(item.updatedAt)].filter(Boolean).join(" · ");
           return [
             '<button type="button" class="hextra-reading-history-sidebar__item" data-path="', item.path, '">',
@@ -488,7 +491,11 @@
             '      <span class="hextra-reading-history-sidebar__item-title">', escapeHtml(item.title || item.path), '</span>',
             '      <span class="hextra-reading-history-sidebar__item-meta">', escapeHtml(metaText), '</span>',
             '    </span>',
-            context ? '    <span class="hextra-reading-history-sidebar__item-context">' + escapeHtml(context) + '</span>' : '',
+            '    <span class="hextra-reading-history-sidebar__item-details">',
+            '      <span class="hextra-reading-history-sidebar__item-detail"><span class="hextra-reading-history-sidebar__item-label">书籍</span><span class="hextra-reading-history-sidebar__item-value">', escapeHtml(details.bookTitle), '</span></span>',
+            '      <span class="hextra-reading-history-sidebar__item-detail"><span class="hextra-reading-history-sidebar__item-label">目录</span><span class="hextra-reading-history-sidebar__item-value">', escapeHtml(details.directoryTitle), '</span></span>',
+            '    </span>',
+            details.queryLabel ? '    <span class="hextra-reading-history-sidebar__item-context">参数: ' + escapeHtml(details.queryLabel) + '</span>' : '',
             '  </span>',
             '</button>'
           ].join("");
