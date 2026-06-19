@@ -16,13 +16,28 @@ import { CommandQuickAccessViewAction } from "@dtinsight/molecule/esm/monaco/qui
 import { Float } from "@dtinsight/molecule/esm/model/workbench/statusBar";
 import { NotificationStatus } from "@dtinsight/molecule/esm/model/notification";
 import "@dtinsight/molecule/esm/style/mo.css";
+import {
+  createEmptyPublishTarget,
+  publishModeDescription,
+  publishModeLabel,
+  publishScopeDescription,
+  publishScopeLabel,
+  publishTargetTypeLabel,
+  type BookItem,
+  type HomeBookItem,
+  type IndexMode,
+  type IndexPlan,
+  type IndexTarget,
+  type PublishMode,
+  type PublishRecord,
+  type PublishScope,
+  type PublishTarget,
+  type PublishTargetType,
+  type TaskInfo,
+  type TreeNode
+} from "./app-models";
 import { request } from "./request/client";
 import "./styles.css";
-
-type TreeNode = { name: string; path: string; type: "file" | "folder"; children?: TreeNode[] };
-type BookItem = { book_dir_name: string; weight: number };
-type HomeBookItem = { book_dir_name: string; weight: number; enable_home_show: boolean };
-type TaskInfo = { id: string; status: string; result_url: string; error_msg: string; done: boolean };
 
 type DialogState =
   | {
@@ -120,6 +135,10 @@ const ACTION_SELECT_THEME = "workbench.action.selectTheme";
 const ACTION_THEME_DIALOG = "cms.action.themeDialog";
 const ACTION_SEARCH_HELP = "cms.action.searchHelp";
 const WORKBENCH_SETTINGS_PATH = "__cms__/workbench.settings.json";
+const INDEX_WORKSPACE_PATH = "__cms__/index.workspace";
+const PUBLISH_WORKSPACE_PATH = "__cms__/publish.workspace";
+const SIDEBAR_INDEX_PANE_ID = "cms.sidebar.index";
+const SIDEBAR_PUBLISH_PANE_ID = "cms.sidebar.publish";
 
 const customLocaleExtension = {
   id: "CmsCustomLocales",
@@ -365,6 +384,760 @@ function DialogLayer() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+class SidebarPaneErrorBoundary extends React.Component<
+  { title: string; children: React.ReactNode },
+  { hasError: boolean; message: string }
+> {
+  constructor(props: { title: string; children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, message: "" };
+  }
+
+  static getDerivedStateFromError(error: unknown) {
+    return {
+      hasError: true,
+      message: error instanceof Error ? error.message : "未知异常"
+    };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error(`[cms-sidebar:${this.props.title}]`, error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="operation-drawer">
+          <SidebarPaneHeader
+            title={this.props.title}
+            subtitle="该面板加载时出现异常，主页面已保护。"
+          />
+          <div className="drawer-section">
+            <DrawerInfoCard title="面板加载失败" tone="warning">
+              <p className="drawer-muted">{this.state.message || "请刷新页面后重试。"}</p>
+            </DrawerInfoCard>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function IndexSidebarPane() {
+  return (
+    <div className="sidebar-pane-host">
+      <SidebarPaneErrorBoundary title="索引操作">
+        <IndexOperationPane embedded layout="sidebar" />
+      </SidebarPaneErrorBoundary>
+    </div>
+  );
+}
+
+function PublishSidebarPane() {
+  return (
+    <div className="sidebar-pane-host">
+      <SidebarPaneErrorBoundary title="发布中心">
+        <PublishOperationPane embedded layout="sidebar" />
+      </SidebarPaneErrorBoundary>
+    </div>
+  );
+}
+
+function IndexWorkspacePane() {
+  return (
+    <SidebarPaneErrorBoundary title="索引操作">
+      <IndexOperationPane layout="workspace" />
+    </SidebarPaneErrorBoundary>
+  );
+}
+
+function PublishWorkspacePane() {
+  return (
+    <SidebarPaneErrorBoundary title="发布中心">
+      <PublishOperationPane layout="workspace" />
+    </SidebarPaneErrorBoundary>
+  );
+}
+
+function SidebarPaneHeader({
+  title,
+  subtitle
+}: {
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <div className="operation-drawer-header">
+      <div>
+        <h3>{title}</h3>
+        <p>{subtitle}</p>
+      </div>
+    </div>
+  );
+}
+
+function DrawerInfoCard({
+  title,
+  tone = "neutral",
+  children
+}: {
+  title: string;
+  tone?: "neutral" | "warning" | "success";
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`drawer-info-card is-${tone}`}>
+      <div className="drawer-info-card-title">{title}</div>
+      <div className="drawer-info-card-body">{children}</div>
+    </div>
+  );
+}
+
+function DrawerChoiceCard({
+  active,
+  title,
+  description,
+  onClick
+}: {
+  active: boolean;
+  title: string;
+  description: string;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" className={active ? "drawer-choice-card is-active" : "drawer-choice-card"} onClick={onClick}>
+      <span className="drawer-choice-title">{title}</span>
+      <span className="drawer-choice-desc">{description}</span>
+    </button>
+  );
+}
+
+function DrawerKeyValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="drawer-kv">
+      <span className="drawer-kv-label">{label}</span>
+      <span className="drawer-kv-value">{value}</span>
+    </div>
+  );
+}
+
+function DrawerStatPill({ children }: { children: React.ReactNode }) {
+  return <span className="drawer-stat-pill">{children}</span>;
+}
+
+function IndexOperationPane({
+  embedded = false,
+  layout = "sidebar"
+}: {
+  embedded?: boolean;
+  layout?: "sidebar" | "workspace";
+}) {
+  const [targets, setTargets] = useState<IndexTarget[]>(["site_meta", "books_meta"]);
+  const [mode, setMode] = useState<IndexMode>("append_new");
+  const [removeMissing, setRemoveMissing] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [plan, setPlan] = useState<IndexPlan | null>(null);
+  const [showAllChanges, setShowAllChanges] = useState(false);
+
+  const toggleTarget = (target: IndexTarget) => {
+    setTargets((prev) => prev.includes(target) ? prev.filter((item) => item !== target) : [...prev, target]);
+  };
+
+  const runPlan = async (apply: boolean) => {
+    if (!targets.length) {
+      notifyError("请至少选择一个索引目标");
+      return;
+    }
+    if (!(await confirmPotentialUnsaved("索引操作"))) return;
+    if (!window.confirm(`确认执行${mode === "append_new" ? "增量补充新索引" : "全量更新"}吗？`)) return;
+    setLoading(true);
+    try {
+      const nextPlan = await request<IndexPlan>(apply ? "/api/index/apply" : "/api/index/plan", {
+        method: "POST",
+        body: JSON.stringify({
+          targets,
+          mode,
+          preview: !apply,
+          remove_missing: removeMissing
+        })
+      });
+      setPlan(nextPlan);
+      if (apply) {
+        await refreshAll();
+        molecule.notification.add([{
+          id: `index-apply-${Date.now()}`,
+          value: "索引操作已完成",
+          status: NotificationStatus.WaitRead
+        }]);
+      }
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "索引操作失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const siteChanges = plan?.site?.changes || [];
+  const booksChanges = plan?.books?.changes || [];
+  const combinedChanges = [
+    ...siteChanges.map((item) => ({ scope: "site", ...item })),
+    ...booksChanges.map((item) => ({ scope: "books", ...item }))
+  ];
+  const totalChanges = combinedChanges.length;
+  const visibleChanges = showAllChanges ? combinedChanges : combinedChanges.slice(0, 12);
+  const targetSummary = targets.length === 2 ? "双索引" : targets[0] === "site_meta" ? "首页索引" : "书单索引";
+  const modeSummary = mode === "append_new" ? "增量补充" : "全量更新";
+
+  const isWorkspace = layout === "workspace";
+
+  return (
+    <div className={isWorkspace ? "operation-drawer operation-drawer-index operation-drawer-workspace" : "operation-drawer operation-drawer-index"}>
+      <SidebarPaneHeader
+        title="索引操作"
+        subtitle={isWorkspace ? "在执行写入前，先做一次预检查。预检查不会改文件；确认更新才会真正写入索引文件。" : "默认推荐增量补充，尽量保留你手工调整过的顺序与首页配置。"}
+      />
+      <div className="drawer-summary-strip">
+        <DrawerStatPill>{targetSummary}</DrawerStatPill>
+        <DrawerStatPill>{modeSummary}</DrawerStatPill>
+        <DrawerStatPill>{removeMissing ? "清理失效项" : "保留失效项"}</DrawerStatPill>
+        {plan ? <DrawerStatPill>检测到 {totalChanges} 条变更</DrawerStatPill> : null}
+      </div>
+      <div className={isWorkspace ? "operation-workspace-grid" : ""}>
+        <div className={isWorkspace ? "operation-workspace-main" : ""}>
+          <div className="drawer-section">
+            <div className="drawer-label">第一步：选择索引目标</div>
+            <div className="drawer-choice-grid">
+              <DrawerChoiceCard
+                active={targets.includes("site_meta")}
+                title="_site_meta.yaml"
+                description="控制首页展示顺序，以及书籍是否显示在首页。"
+                onClick={() => toggleTarget("site_meta")}
+              />
+              <DrawerChoiceCard
+                active={targets.includes("books_meta")}
+                title="_books_meta.yaml"
+                description="控制书籍列表和构建时的书籍顺序。"
+                onClick={() => toggleTarget("books_meta")}
+              />
+            </div>
+          </div>
+          <div className="drawer-section">
+            <div className="drawer-label">第二步：选择处理方式</div>
+            <div className="drawer-choice-grid">
+              <DrawerChoiceCard
+                active={mode === "append_new"}
+                title="增量补充"
+                description="旧条目不动，只把新书补到末尾。日常推荐用这个。"
+                onClick={() => setMode("append_new")}
+              />
+              <DrawerChoiceCard
+                active={mode === "full_refresh"}
+                title="全量更新"
+                description="按扫描结果整体重建。适合索引混乱或初始化。"
+                onClick={() => setMode("full_refresh")}
+              />
+            </div>
+            <label className="drawer-checkbox">
+              <input type="checkbox" checked={removeMissing} onChange={(event) => setRemoveMissing(event.target.checked)} />
+              同时清理目录中已不存在的失效条目
+            </label>
+          </div>
+          <div className="drawer-section drawer-section-actions">
+            <div className="drawer-label">第三步：先检查，再决定是否写入</div>
+            <DrawerInfoCard title="这两个按钮的区别">
+              <DrawerKeyValue label="预检查" value="只做扫描和比对，不会写文件" />
+              <DrawerKeyValue label="确认更新" value="会真正写入 _site_meta.yaml / _books_meta.yaml" />
+            </DrawerInfoCard>
+            <div className="drawer-sticky-actions drawer-sticky-actions-inline">
+              <button type="button" className="app-button app-button-secondary" disabled={loading} onClick={() => void runPlan(false)}>{loading ? "处理中..." : "先做预检查"}</button>
+              <button type="button" className="app-button app-button-primary" disabled={loading} onClick={() => void runPlan(true)}>{loading ? "处理中..." : "确认写入索引"}</button>
+            </div>
+          </div>
+        </div>
+        <div className={isWorkspace ? "operation-workspace-side" : "drawer-section drawer-scroll"}>
+          <div className="drawer-section drawer-section-side">
+            <div className="drawer-label">检查结果</div>
+            <DrawerInfoCard title="当前这次会怎么处理">
+              <DrawerKeyValue label="目标" value={targets.length === 2 ? "同时处理两个索引" : targets[0] === "site_meta" ? "仅 _site_meta.yaml" : "仅 _books_meta.yaml"} />
+              <DrawerKeyValue label="方式" value={mode === "append_new" ? "增量补充新索引" : "全量更新"} />
+              <DrawerKeyValue label="失效项" value={removeMissing ? "会清理" : "不清理"} />
+            </DrawerInfoCard>
+            {plan ? (
+              <>
+                <div className="drawer-inline-stats">
+                  <DrawerStatPill>总变更 {totalChanges}</DrawerStatPill>
+                  <DrawerStatPill>site {siteChanges.length}</DrawerStatPill>
+                  <DrawerStatPill>books {booksChanges.length}</DrawerStatPill>
+                </div>
+                <DrawerInfoCard title="检测到的变更">
+                  <p className="drawer-muted">这里列出来的是“如果你现在点击确认写入，哪些条目会被新增、重排或清理”。</p>
+                </DrawerInfoCard>
+                <div className="drawer-plan-list drawer-plan-list-compact drawer-plan-list-tall">
+                  {visibleChanges.map((item, index) => (
+                    <div key={`${item.scope}-${item.book_dir_name}-${index}`} className="drawer-plan-item">
+                      <span className="drawer-plan-tag">[{item.scope}]</span>
+                      <span className="drawer-plan-text">{item.book_dir_name} - {item.detail}</span>
+                    </div>
+                  ))}
+                  {!combinedChanges.length ? <p className="drawer-muted">这次没有检测到需要调整的内容。</p> : null}
+                </div>
+                {combinedChanges.length > 12 ? (
+                  <button type="button" className="drawer-inline-link drawer-inline-link-spaced" onClick={() => setShowAllChanges((value) => !value)}>
+                    {showAllChanges ? "收起变更列表" : `展开全部 ${combinedChanges.length} 条变更`}
+                  </button>
+                ) : null}
+              </>
+            ) : (
+              <DrawerInfoCard title="还没开始检查">
+                <p className="drawer-muted">先点左侧的“先做预检查”。检查完成后，这里会显示本次准备写入的变更结果。</p>
+              </DrawerInfoCard>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PublishOperationPane({
+  embedded = false,
+  layout = "sidebar"
+}: {
+  embedded?: boolean;
+  layout?: "sidebar" | "workspace";
+}) {
+  const [targets, setTargets] = useState<PublishTarget[]>([]);
+  const [records, setRecords] = useState<PublishRecord[]>([]);
+  const [scope, setScope] = useState<PublishScope>("full_site");
+  const [mode, setMode] = useState<PublishMode>("incremental");
+  const [targetType, setTargetType] = useState<PublishTargetType>("s3");
+  const [targetId, setTargetId] = useState("system-default");
+  const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<PublishTarget>(createEmptyPublishTarget("local_dir", "overwrite"));
+  const [configDialogOpen, setConfigDialogOpen] = useState(false);
+  const [configFilterType, setConfigFilterType] = useState<PublishTargetType>("s3");
+
+  const loadData = async () => {
+    try {
+      const [targetItems, recordItems] = await Promise.all([
+        request<PublishTarget[]>("/api/publish/target/list"),
+        request<PublishRecord[]>("/api/publish/record/list")
+      ]);
+      setTargets(Array.isArray(targetItems) ? targetItems : []);
+      setRecords(Array.isArray(recordItems) ? recordItems : []);
+    } catch (error) {
+      console.error("[cms-publish-load]", error);
+      notifyError(error instanceof Error ? error.message : "加载发布配置失败");
+      setTargets([]);
+      setRecords([]);
+    }
+  };
+
+  useEffect(() => {
+    void loadData();
+  }, []);
+
+  useEffect(() => {
+    const current = targets.find((item) => item.type === targetType && item.id === targetId);
+    if (current?.mode_default === "overwrite" || current?.mode_default === "incremental") {
+      setMode(current.mode_default);
+    }
+  }, [targetId, targetType, targets]);
+
+  const filteredTargets = targets.filter((item) => item.type === targetType);
+  useEffect(() => {
+    const typedTargets = targets.filter((item) => item.type === targetType);
+    if (targetType === "s3") {
+      if (targetId === "system-default" || typedTargets.some((item) => item.id === targetId)) return;
+      setTargetId("system-default");
+      return;
+    }
+    if (typedTargets.some((item) => item.id === targetId)) return;
+    setTargetId(typedTargets[0]?.id || "");
+  }, [targetId, targetType, targets]);
+
+  const configFilteredTargets = targets.filter((item) => item.type === configFilterType);
+  const selectedTarget = targetId === "system-default"
+    ? {
+        id: "system-default",
+        name: "系统默认 S3",
+        type: "s3" as const,
+        site_public_domain: "使用 system.yaml 中的站点域名",
+        base_prefix: "/"
+      }
+    : filteredTargets.find((item) => item.id === targetId) || null;
+
+  const openCreateTargetDialog = (type: PublishTargetType = targetType) => {
+    setConfigFilterType(type);
+    setEditing(createEmptyPublishTarget(type, mode));
+    setConfigDialogOpen(true);
+  };
+
+  const openEditTargetDialog = (target: PublishTarget) => {
+    setConfigFilterType(target.type);
+    setEditing({ ...target });
+    setConfigDialogOpen(true);
+  };
+
+  const start = async () => {
+    let books: string[] = [];
+    if (scope === "single_book") {
+      const book = await ensureBookForPublish();
+      if (!book) return;
+      books = [book];
+    }
+    if (!(await confirmPotentialUnsaved("发布"))) return;
+    const targetLabel = targetId === "system-default" ? "系统默认 S3" : (filteredTargets.find((item) => item.id === targetId)?.name || targetId);
+    if (!window.confirm(`确认将“${publishScopeLabel(scope)}”以“${publishModeLabel(mode)}”发布到“${targetLabel}”吗？`)) return;
+    setBusy(true);
+    try {
+      const data = await request<{ task_id: string }>("/api/publish/start", {
+        method: "POST",
+        body: JSON.stringify({
+          scope,
+          books,
+          mode,
+          target_type: targetType,
+          target_id: targetId
+        })
+      });
+      molecule.panel.open({ id: "publish", name: "发布日志", closable: false, renderPane: () => <PublishPane /> });
+      subscribePublish(data.task_id);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "发布失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveTarget = async () => {
+    setBusy(true);
+    try {
+      const saved = await request<PublishTarget>("/api/publish/target/save", {
+        method: "POST",
+        body: JSON.stringify(editing)
+      });
+      await loadData();
+      setTargetType(saved.type);
+      setTargetId(saved.id);
+      setConfigFilterType(saved.type);
+      setConfigDialogOpen(false);
+      molecule.notification.add([{
+        id: `target-save-${Date.now()}`,
+        value: "发布配置已保存",
+        status: NotificationStatus.WaitRead
+      }]);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "保存发布配置失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeTarget = async (target: PublishTarget) => {
+    if (!window.confirm(`确认删除发布配置“${target.name}”吗？删除后该目标将无法继续被选择。`)) return;
+    setBusy(true);
+    try {
+      await request(`/api/publish/target/remove?${new URLSearchParams({ type: target.type, id: target.id }).toString()}`, {
+        method: "DELETE"
+      });
+      await loadData();
+      if (target.type === targetType && target.id === targetId) {
+        setTargetId(target.type === "s3" ? "system-default" : "");
+      }
+      if (editing.type === target.type && editing.id === target.id) {
+        setEditing(createEmptyPublishTarget(target.type, mode));
+      }
+      molecule.notification.add([{
+        id: `target-remove-${Date.now()}`,
+        value: "发布配置已删除",
+        status: NotificationStatus.WaitRead
+      }]);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "删除发布配置失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const testTarget = async () => {
+    setBusy(true);
+    try {
+      await request("/api/publish/target/test", {
+        method: "POST",
+        body: JSON.stringify(editing)
+      });
+      molecule.notification.add([{
+        id: `target-test-${Date.now()}`,
+        value: "连接测试成功",
+        status: NotificationStatus.WaitRead
+      }]);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "连接测试失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const restoreRecord = async (recordId: string) => {
+    if (!window.confirm("确认从这条发布记录的备份版本恢复吗？")) return;
+    setBusy(true);
+    try {
+      await request("/api/publish/record/restore", {
+        method: "POST",
+        body: JSON.stringify({ record_id: recordId })
+      });
+      molecule.notification.add([{
+        id: `record-restore-${Date.now()}`,
+        value: "恢复操作已完成",
+        status: NotificationStatus.WaitRead
+      }]);
+      await loadData();
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "恢复失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const isWorkspace = layout === "workspace";
+
+  return (
+    <div className={isWorkspace ? "operation-drawer operation-drawer-workspace" : "operation-drawer"}>
+      <SidebarPaneHeader
+        title="发布中心"
+        subtitle={isWorkspace ? "发布范围、目标配置、记录和备份恢复都放在这里统一处理。" : "支持整站、单书、门户发布，并区分增量与覆盖模式。"}
+      />
+      <div className={isWorkspace ? "operation-workspace-grid" : ""}>
+        <div className={isWorkspace ? "operation-workspace-main" : ""}>
+          <div className="drawer-section">
+            <div className="drawer-label">第一步：选择构建范围</div>
+            <div className="drawer-choice-grid">
+              {(["full_site", "single_book", "portal_only"] as PublishScope[]).map((item) => (
+                <DrawerChoiceCard
+                  key={item}
+                  active={scope === item}
+                  title={publishScopeLabel(item)}
+                  description={publishScopeDescription(item)}
+                  onClick={() => setScope(item)}
+                />
+              ))}
+            </div>
+            <br />
+            <DrawerInfoCard title="当前构建范围">
+              <DrawerKeyValue label="构建对象" value={publishScopeLabel(scope)} />
+              <DrawerKeyValue
+                label="说明"
+                value="这里决定本次要构建并发布哪一类站点内容。"
+              />
+            </DrawerInfoCard>
+          </div>
+          <div className="drawer-section">
+            <div className="drawer-label">第二步：选择发布地址</div>
+            <div className="drawer-choice-grid">
+              {(["s3", "local_dir", "sftp"] as PublishTargetType[]).map((item) => (
+                <DrawerChoiceCard
+                  key={item}
+                  active={targetType === item}
+                  title={publishTargetTypeLabel(item)}
+                  description={publishTargetTypeDescription(item)}
+                  onClick={() => setTargetType(item)}
+                />
+              ))}
+            </div>
+            <div className="drawer-target-picker">
+              <select className="drawer-select" value={targetId} onChange={(event) => setTargetId(event.target.value)}>
+                {targetType === "s3" ? <option value="system-default">系统默认 S3</option> : null}
+                {filteredTargets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+              <button type="button" className="app-button app-button-secondary" onClick={() => openCreateTargetDialog(targetType)}>
+                添加配置
+              </button>
+            </div>
+            <div className="drawer-inline-toolbar">
+              <button
+                type="button"
+                className="drawer-inline-link"
+                onClick={() => {
+                  setConfigFilterType(targetType);
+                  setConfigDialogOpen(true);
+                }}
+              >
+                管理 {publishTargetTypeLabel(targetType)} 配置
+              </button>
+              {selectedTarget && targetId !== "system-default" ? (
+                <button type="button" className="drawer-inline-link" onClick={() => openEditTargetDialog(selectedTarget)}>
+                  查看或修改当前配置
+                </button>
+              ) : null}
+            </div>
+            <DrawerInfoCard title="当前目标摘要">
+              <DrawerKeyValue label="目标名称" value={selectedTarget?.name || "尚未选择"} />
+              <DrawerKeyValue label="目标类型" value={publishTargetTypeLabel(targetType)} />
+              <DrawerKeyValue
+                label="写入位置"
+                value={
+                  selectedTarget?.type === "local_dir"
+                    ? selectedTarget.target_dir || "未设置"
+                    : selectedTarget?.type === "sftp"
+                      ? selectedTarget.remote_dir || "未设置"
+                      : selectedTarget?.base_prefix || "/"
+                }
+              />
+            </DrawerInfoCard>
+            {targetType !== "s3" && !filteredTargets.length ? (
+              <DrawerInfoCard title="还没有可用配置" tone="warning">
+                当前类型下还没有发布配置。先点“添加配置”补一条，保存后就能直接用于发布。
+              </DrawerInfoCard>
+            ) : null}
+          </div>
+          <div className="drawer-section">
+            <div className="drawer-label">第三步：选择发布模式</div>
+            <div className="drawer-choice-grid">
+              {(["incremental", "overwrite"] as PublishMode[]).map((item) => (
+                <DrawerChoiceCard
+                  key={item}
+                  active={mode === item}
+                  title={publishModeLabel(item)}
+                  description={publishModeDescription(item)}
+                  onClick={() => setMode(item)}
+                />
+              ))}
+            </div>
+            <br />
+            {mode === "overwrite" ? (
+              <DrawerInfoCard title="覆盖模式提醒" tone="warning">
+                发布前会把旧目录移动到 `bak/时间版本`，更适合正式切换场景。
+              </DrawerInfoCard>
+            ) : (
+              <DrawerInfoCard title="增量模式说明" tone="success">
+                仅覆盖本次涉及的同路径文件，不处理其它历史文件，适合日常高频发布。
+              </DrawerInfoCard>
+            )}
+          </div>
+          <div className="drawer-section drawer-section-actions">
+            <div className="drawer-label">最后一步：开始发布</div>
+            <DrawerInfoCard title="执行前确认">
+              <DrawerKeyValue label="构建范围" value={publishScopeLabel(scope)} />
+              <DrawerKeyValue label="发布地址" value={selectedTarget?.name || "尚未选择"} />
+              <DrawerKeyValue label="发布内容" value="按本次构建结果整体发布" />
+              <DrawerKeyValue label="模式" value={publishModeLabel(mode)} />
+            </DrawerInfoCard>
+            <div className="drawer-sticky-actions drawer-sticky-actions-inline">
+              <button type="button" className="app-button app-button-secondary" disabled={busy} onClick={() => void testTarget()}>先测连接</button>
+              <button type="button" className="app-button app-button-primary" disabled={busy} onClick={() => void start()}>{busy ? "处理中..." : "确认开始发布"}</button>
+            </div>
+          </div>
+        </div>
+        <div className={isWorkspace ? "operation-workspace-side" : "drawer-section drawer-scroll"}>
+          <div className="drawer-section drawer-section-side">
+            <div className="drawer-label">配置存放位置</div>
+            <DrawerInfoCard title="独立配置文件">
+              <div className="drawer-muted">
+                发布配置单独保存在 <code>service/config/publish_targets/</code>，按类型分目录保存，不再和系统总配置写在一起。
+              </div>
+            </DrawerInfoCard>
+          </div>
+          <div className="drawer-section drawer-section-side">
+        <div className="drawer-label">最近发布记录</div>
+        <div className="drawer-plan-list">
+          {records.slice(0, 10).map((record) => (
+            <div key={record.record_id} className="drawer-record-item">
+              <div className="drawer-record-main">
+                <strong>{record.publishing_time}</strong>
+                <span>{publishScopeLabel(record.publishing_scope as PublishScope)} / {publishModeLabel(record.publish_mode as PublishMode)}</span>
+                <span>{record.publishing_target_name || record.publishing_target_id || record.publishing_target_type}</span>
+                <span className={record.status === "success" ? "drawer-status-badge is-success" : "drawer-status-badge is-fail"}>{record.status === "success" ? "发布成功" : "发布失败"}</span>
+                {record.error_msg ? <span className="drawer-error-text">失败原因：{record.error_msg}</span> : null}
+                {record.backup_path ? <code>{record.backup_path}</code> : <span className="drawer-muted">无备份</span>}
+              </div>
+              {record.backup_path ? <button type="button" className="drawer-link-button" onClick={() => void restoreRecord(record.record_id)}>从备份恢复</button> : null}
+            </div>
+          ))}
+          {!records.length ? <p className="drawer-muted">暂无发布记录。</p> : null}
+        </div>
+          </div>
+        </div>
+      </div>
+      {configDialogOpen ? (
+        <div className="app-modal-backdrop" onClick={() => !busy && setConfigDialogOpen(false)}>
+          <div className="app-modal app-modal-wide" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className="app-modal-header">
+              <h3>发布配置管理</h3>
+              <button type="button" className="app-modal-close" onClick={() => !busy && setConfigDialogOpen(false)}>关闭</button>
+            </div>
+            <div className="app-modal-body">
+              <div className="publish-config-dialog">
+                <div className="publish-config-list">
+                  <div className="drawer-label">按类型查看</div>
+                  <div className="drawer-choice-grid">
+                    {(["s3", "local_dir", "sftp"] as PublishTargetType[]).map((item) => (
+                      <DrawerChoiceCard
+                        key={item}
+                        active={configFilterType === item}
+                        title={publishTargetTypeLabel(item)}
+                        description={publishTargetTypeDescription(item)}
+                        onClick={() => setConfigFilterType(item)}
+                      />
+                    ))}
+                  </div>
+                  <div className="drawer-actions drawer-actions-stack">
+                    <button type="button" className="app-button app-button-primary" disabled={busy} onClick={() => openCreateTargetDialog(configFilterType)}>
+                      新增 {publishTargetTypeLabel(configFilterType)} 配置
+                    </button>
+                  </div>
+                  <div className="drawer-plan-list drawer-plan-list-tall">
+                    {configFilteredTargets.map((item) => (
+                      <div key={`${item.type}-${item.id}`} className={editing.id === item.id && editing.type === item.type ? "drawer-record-item is-active" : "drawer-record-item"}>
+                        <div className="drawer-record-main">
+                          <strong>{item.name}</strong>
+                          <span>{item.id}</span>
+                          <span className={item.mode_default === "overwrite" ? "drawer-mode-badge is-overwrite" : "drawer-mode-badge is-incremental"}>{item.mode_default === "overwrite" ? "默认覆盖模式" : "默认增量模式"}</span>
+                        </div>
+                        <div className="drawer-record-actions">
+                          <button type="button" className="drawer-link-button" onClick={() => openEditTargetDialog(item)}>查看/编辑</button>
+                          <button type="button" className="drawer-link-button drawer-link-danger" disabled={busy} onClick={() => void removeTarget(item)}>删除</button>
+                        </div>
+                      </div>
+                    ))}
+                    {!configFilteredTargets.length ? <p className="drawer-muted">这个类型下还没有发布配置。</p> : null}
+                  </div>
+                </div>
+                <div className="publish-config-editor">
+                  <div className="drawer-label">{editing.id ? "配置详情与编辑" : "新建配置"}</div>
+                  <div className="drawer-form-grid">
+                    <input className="app-modal-input" placeholder="配置 ID" value={editing.id} onChange={(event) => setEditing((prev) => ({ ...prev, id: event.target.value }))} />
+                    <input className="app-modal-input" placeholder="配置名称" value={editing.name} onChange={(event) => setEditing((prev) => ({ ...prev, name: event.target.value }))} />
+                    <select className="drawer-select" value={editing.type} onChange={(event) => {
+                      const nextType = event.target.value as PublishTargetType;
+                      setEditing((prev) => ({ ...prev, type: nextType }));
+                      setConfigFilterType(nextType);
+                    }}>
+                      <option value="local_dir">本地目录</option>
+                      <option value="s3">S3</option>
+                      <option value="sftp">SFTP</option>
+                    </select>
+                    <select className="drawer-select" value={editing.mode_default || "incremental"} onChange={(event) => setEditing((prev) => ({ ...prev, mode_default: event.target.value }))}>
+                      <option value="incremental">增量模式</option>
+                      <option value="overwrite">覆盖模式</option>
+                    </select>
+                    {renderPublishTargetFields(editing, setEditing)}
+                  </div>
+                  <div className="drawer-actions">
+                    <button type="button" className="app-button app-button-secondary" disabled={busy} onClick={() => void testTarget()}>测试连接</button>
+                    <button type="button" className="app-button app-button-primary" disabled={busy} onClick={() => void saveTarget()}>保存配置</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -630,16 +1403,6 @@ function setupStatusBar() {
     name: "未选书籍",
     render: () => <span>{store.get().currentBook || "未选书籍"}</span>
   }, Float.left);
-  molecule.statusBar.add({
-    id: "full-publish",
-    name: "完整发布",
-    onClick: () => void startPublish("full")
-  }, Float.right);
-  molecule.statusBar.add({
-    id: "single-publish",
-    name: "发布当前书籍",
-    onClick: () => void startPublish("single")
-  }, Float.right);
 }
 
 function setupFolderTree() {
@@ -682,24 +1445,24 @@ function setupActivityBar() {
 
   const customItems: IActivityBarItem[] = [
     {
-      id: ACTIVITY_TOGGLE_PANEL_ID,
-      name: "底栏",
-      title: "显示或隐藏底栏",
-      icon: "list-tree",
-      type: "global"
-    },
-    {
-      id: ACTIVITY_REBUILD_HOME_META_ID,
-      name: "首页推荐",
-      title: "扫描书籍目录并重建 _site_meta.yaml",
+      id: SIDEBAR_INDEX_PANE_ID,
+      name: "索引操作",
+      title: "索引操作",
       icon: "repo",
       type: "global"
     },
     {
-      id: ACTIVITY_REBUILD_BOOKS_META_ID,
-      name: "书籍列表",
-      title: "扫描书籍目录并重建 _books_meta.yaml",
-      icon: "library",
+      id: SIDEBAR_PUBLISH_PANE_ID,
+      name: "发布中心",
+      title: "发布中心",
+      icon: "cloud-upload",
+      type: "global"
+    },
+    {
+      id: ACTIVITY_TOGGLE_PANEL_ID,
+      name: "底栏",
+      title: "显示或隐藏底栏",
+      icon: "list-tree",
       type: "global"
     },
     {
@@ -720,14 +1483,14 @@ function setupActivityBar() {
 
   molecule.activityBar.add(customItems);
   molecule.activityBar.onClick((selectedKey) => {
+    if (selectedKey === SIDEBAR_INDEX_PANE_ID) {
+      openOperationWorkspace(INDEX_WORKSPACE_PATH);
+    }
+    if (selectedKey === SIDEBAR_PUBLISH_PANE_ID) {
+      openOperationWorkspace(PUBLISH_WORKSPACE_PATH);
+    }
     if (selectedKey === ACTIVITY_TOGGLE_PANEL_ID) {
       toggleBottomPanel();
-    }
-    if (selectedKey === ACTIVITY_REBUILD_HOME_META_ID) {
-      void rebuildSiteMeta();
-    }
-    if (selectedKey === ACTIVITY_REBUILD_BOOKS_META_ID) {
-      void rebuildBooksMeta();
     }
     if (selectedKey === GLOBAL_LOGOUT_ID) {
       openLogoutDialog();
@@ -857,6 +1620,72 @@ function setupSearchIntegration() {
       matchLength: target.matchLength
     });
   });
+}
+
+function activateSidebarPane(id: string) {
+  molecule.activityBar.setActive(id);
+  molecule.sidebar.setActive(id);
+}
+
+function openOperationWorkspace(path: string) {
+  const existing = findEditorTabByPath(path);
+  if (existing) {
+    molecule.editor.setActive(existing.groupId, path);
+    setActiveTab(path, existing.groupId, "");
+    return;
+  }
+  molecule.editor.open(buildEditorTab(path, ""));
+  const groupId = molecule.editor.getGroupIdByTab(path) ?? undefined;
+  setActiveTab(path, groupId, "");
+}
+
+
+function publishTargetTypeDescription(type: PublishTarget["type"]) {
+  switch (type) {
+    case "s3":
+      return "适合对象存储与静态托管，兼容当前系统默认发布方式。";
+    case "local_dir":
+      return "直接发布到当前服务器目录，适合本机站点部署。";
+    case "sftp":
+      return "通过远程连接写入目标目录，适合其他服务器。";
+    default:
+      return "";
+  }
+}
+
+function renderPublishTargetFields(target: PublishTarget, setTarget: React.Dispatch<React.SetStateAction<PublishTarget>>) {
+  if (target.type === "s3") {
+    return (
+      <>
+        <input className="app-modal-input" placeholder="Bucket" value={target.bucket || ""} onChange={(e) => setTarget((prev) => ({ ...prev, bucket: e.target.value }))} />
+        <input className="app-modal-input" placeholder="Region" value={target.region || ""} onChange={(e) => setTarget((prev) => ({ ...prev, region: e.target.value }))} />
+        <input className="app-modal-input" placeholder="Endpoint" value={target.endpoint || ""} onChange={(e) => setTarget((prev) => ({ ...prev, endpoint: e.target.value }))} />
+        <input className="app-modal-input" placeholder="Access Key ID" value={target.access_key_id || ""} onChange={(e) => setTarget((prev) => ({ ...prev, access_key_id: e.target.value }))} />
+        <input className="app-modal-input" placeholder="Secret Access Key" value={target.secret_access_key || ""} onChange={(e) => setTarget((prev) => ({ ...prev, secret_access_key: e.target.value }))} />
+        <input className="app-modal-input" placeholder="Public Domain" value={target.site_public_domain || ""} onChange={(e) => setTarget((prev) => ({ ...prev, site_public_domain: e.target.value }))} />
+        <input className="app-modal-input" placeholder="Base Prefix" value={target.base_prefix || ""} onChange={(e) => setTarget((prev) => ({ ...prev, base_prefix: e.target.value }))} />
+      </>
+    );
+  }
+  if (target.type === "sftp") {
+    return (
+      <>
+        <input className="app-modal-input" placeholder="Host" value={target.host || ""} onChange={(e) => setTarget((prev) => ({ ...prev, host: e.target.value }))} />
+        <input className="app-modal-input" placeholder="Port" value={String(target.port || 22)} onChange={(e) => setTarget((prev) => ({ ...prev, port: Number(e.target.value) || 22 }))} />
+        <input className="app-modal-input" placeholder="Username" value={target.username || ""} onChange={(e) => setTarget((prev) => ({ ...prev, username: e.target.value }))} />
+        <input className="app-modal-input" placeholder="Password" value={target.password || ""} onChange={(e) => setTarget((prev) => ({ ...prev, password: e.target.value }))} />
+        <input className="app-modal-input" placeholder="Private Key Path" value={target.private_key_path || ""} onChange={(e) => setTarget((prev) => ({ ...prev, private_key_path: e.target.value }))} />
+        <input className="app-modal-input" placeholder="Remote Dir" value={target.remote_dir || ""} onChange={(e) => setTarget((prev) => ({ ...prev, remote_dir: e.target.value }))} />
+        <input className="app-modal-input" placeholder="Remote Bak Dir" value={target.remote_bak_dir || ""} onChange={(e) => setTarget((prev) => ({ ...prev, remote_bak_dir: e.target.value }))} />
+      </>
+    );
+  }
+  return (
+    <>
+      <input className="app-modal-input" placeholder="Target Dir" value={target.target_dir || ""} onChange={(e) => setTarget((prev) => ({ ...prev, target_dir: e.target.value }))} />
+      <input className="app-modal-input" placeholder="Bak Dir" value={target.bak_dir || ""} onChange={(e) => setTarget((prev) => ({ ...prev, bak_dir: e.target.value }))} />
+    </>
+  );
 }
 
 function setupThemePersistence() {
@@ -1406,8 +2235,11 @@ function subscribePublish(taskId: string) {
   });
   stream.addEventListener("status", (event) => {
     const payload = JSON.parse((event as MessageEvent).data) as TaskInfo;
+    const nextState = payload.error_msg
+      ? `发布失败：${payload.error_msg}`
+      : payload.status || "处理中";
     store.set({
-      publishState: payload.status || "处理中",
+      publishState: nextState,
       publishURL: payload.result_url || store.get().publishURL,
       publishBusy: !payload.done,
       publishLastEventAt: Date.now()
@@ -1463,6 +2295,8 @@ function buildEditorTab(path: string, value: string) {
   const isMarkdown = path.endsWith(".md");
   const isImage = isImagePath(path);
   const isPdf = isPdfPath(path);
+  const isIndexWorkspace = path === INDEX_WORKSPACE_PATH;
+  const isPublishWorkspace = path === PUBLISH_WORKSPACE_PATH;
   return {
     id: path,
     name: getEditorTabName(path),
@@ -1472,7 +2306,11 @@ function buildEditorTab(path: string, value: string) {
       language,
       modified: false
     },
-    renderPane: isImage
+    renderPane: isIndexWorkspace
+      ? () => <IndexWorkspacePane />
+      : isPublishWorkspace
+        ? () => <PublishWorkspacePane />
+      : isImage
       ? (_: unknown, tab?: { data?: { path?: string } }) => (
           <ImagePreviewPane path={tab?.data?.path || path} />
         )
@@ -1507,7 +2345,10 @@ function buildInsertedSnippet(file: File, url: string) {
 }
 
 function getEditorTabName(path: string) {
-  return path === WORKBENCH_SETTINGS_PATH ? "工作台设置.json" : (path.split("/").pop() || path);
+  if (path === WORKBENCH_SETTINGS_PATH) return "工作台设置.json";
+  if (path === INDEX_WORKSPACE_PATH) return "索引操作";
+  if (path === PUBLISH_WORKSPACE_PATH) return "发布中心";
+  return path.split("/").pop() || path;
 }
 
 function findEditorTabByPath(path: string, preferredGroupId?: string | number) {
@@ -2368,6 +3209,18 @@ function withCloseGuardBypass(action: () => void) {
   } finally {
     closeGuardBypassDepth -= 1;
   }
+}
+
+async function confirmPotentialUnsaved(actionLabel: string) {
+  const modifiedTabs = (molecule.editor.getState().groups || [])
+    .flatMap((group: { data?: Array<{ name?: string; data?: { path?: string; modified?: boolean }; status?: string }> }) => group.data || [])
+    .filter((tab) => isTabModified(tab));
+  if (!modifiedTabs.length) return true;
+  const names = modifiedTabs.map((tab) => tab.name || basename(tab.data?.path || "未命名文件"));
+  const message = names.length === 1
+    ? `当前有未保存文档“${names[0]}”，继续执行${actionLabel}可能导致视图与磁盘内容不一致。是否继续？`
+    : `当前有 ${names.length} 个未保存文档：\n\n${names.join("\n")}\n\n继续执行${actionLabel}可能导致视图与磁盘内容不一致。是否继续？`;
+  return window.confirm(message);
 }
 
 function canCloseTabs(tabs: Array<{ id?: string | number; name?: string; data?: { path?: string; modified?: boolean } | undefined; status?: string }>) {
