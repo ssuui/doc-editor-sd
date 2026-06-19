@@ -33,6 +33,7 @@ service/bin/*
 
 # Local config / vendored theme internals
 service/config/system.yaml
+service/config/publish_targets/
 service/global_theme/hextra/.git/
 *.hugo_build.lock
 
