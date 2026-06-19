@@ -4,6 +4,7 @@ hugo_bin_path: "./bin/hugo-extended"
 global_theme_path: "./global_theme"
 build_temp_root: "./build_temp"
 publish_record_path: "./publish_records"
+publish_targets_path: "./config/publish_targets"
 temp_clean_interval: 24
 build_task_timeout: 300
 auth:

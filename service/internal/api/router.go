@@ -14,6 +14,9 @@ import (
 	"doc-publish-server/internal/configloader"
 	"doc-publish-server/internal/fsmanager"
 	"doc-publish-server/internal/hugobuilder"
+	"doc-publish-server/internal/indexmanager"
+	"doc-publish-server/internal/publisher"
+	"doc-publish-server/internal/publishtarget"
 	"doc-publish-server/internal/publishtask"
 	"doc-publish-server/internal/recordstore"
 	"doc-publish-server/internal/s3uploader"
@@ -29,6 +32,8 @@ type Services struct {
 	Uploader  *s3uploader.Service
 	Tasks     *publishtask.Service
 	Records   *recordstore.Service
+	Indexes   *indexmanager.Service
+	Targets   *publishtarget.Service
 	SourceDir string
 }
 
@@ -58,12 +63,18 @@ func Register(r *gin.Engine, svc Services, staticDir string) {
 			respondFileResult(c, books, err)
 		})
 		fsGroup.POST("/site/rebuild-meta", func(c *gin.Context) {
-			books, err := svc.FS.RebuildSiteMeta()
-			respondFileResult(c, books, err)
+			plan, err := svc.Indexes.Apply(indexmanager.PlanRequest{
+				Targets: []string{"site_meta"},
+				Mode:    "full_refresh",
+			})
+			respondFileResult(c, plan.Site.Items, err)
 		})
 		fsGroup.POST("/site/rebuild-books-meta", func(c *gin.Context) {
-			books, err := svc.FS.RebuildBooksMeta()
-			respondFileResult(c, books, err)
+			plan, err := svc.Indexes.Apply(indexmanager.PlanRequest{
+				Targets: []string{"books_meta"},
+				Mode:    "full_refresh",
+			})
+			respondFileResult(c, plan.Books.Items, err)
 		})
 		fsGroup.GET("/book/tree", func(c *gin.Context) {
 			tree, err := svc.FS.BookTree(c.Query("bookDirName"))
@@ -186,14 +197,115 @@ func Register(r *gin.Engine, svc Services, staticDir string) {
 		})
 	}
 
+	indexGroup := r.Group("/api/index")
+	{
+		indexGroup.POST("/plan", func(c *gin.Context) {
+			var req indexmanager.PlanRequest
+			if c.ShouldBindJSON(&req) != nil {
+				Fail(c, 9999, "请求参数错误")
+				return
+			}
+			plan, err := svc.Indexes.Plan(req)
+			if err != nil {
+				Fail(c, 9999, err.Error())
+				return
+			}
+			Success(c, plan)
+		})
+		indexGroup.POST("/apply", func(c *gin.Context) {
+			var req indexmanager.PlanRequest
+			if c.ShouldBindJSON(&req) != nil {
+				Fail(c, 9999, "请求参数错误")
+				return
+			}
+			plan, err := svc.Indexes.Apply(req)
+			if err != nil {
+				Fail(c, 9999, err.Error())
+				return
+			}
+			Success(c, plan)
+		})
+	}
+
 	pubGroup := r.Group("/api/publish")
 	{
 		pubGroup.POST("/full-site", func(c *gin.Context) {
-			startPublish(c, svc, "full", nil)
+			startPublish(c, svc, publishStartRequest{
+				Scope:      "full_site",
+				Mode:       "incremental",
+				TargetType: "s3",
+				TargetID:   "system-default",
+			})
 		})
 		pubGroup.POST("/single-book", func(c *gin.Context) {
 			book := c.Query("bookDirName")
-			startPublish(c, svc, "single", []string{book})
+			startPublish(c, svc, publishStartRequest{
+				Scope:      "single_book",
+				Books:      []string{book},
+				Mode:       "incremental",
+				TargetType: "s3",
+				TargetID:   "system-default",
+			})
+		})
+		pubGroup.POST("/start", func(c *gin.Context) {
+			var req publishStartRequest
+			if c.ShouldBindJSON(&req) != nil {
+				Fail(c, 9999, "请求参数错误")
+				return
+			}
+			startPublish(c, svc, req)
+		})
+		pubGroup.GET("/target/list", func(c *gin.Context) {
+			items, err := svc.Targets.List()
+			if err != nil {
+				Fail(c, 9999, err.Error())
+				return
+			}
+			Success(c, items)
+		})
+		pubGroup.GET("/target/detail", func(c *gin.Context) {
+			item, err := svc.Targets.Detail(c.Query("type"), c.Query("id"))
+			if err != nil {
+				Fail(c, 2001, "发布配置不存在")
+				return
+			}
+			Success(c, item)
+		})
+		pubGroup.POST("/target/save", func(c *gin.Context) {
+			var req configloader.PublishTargetConfig
+			if c.ShouldBindJSON(&req) != nil {
+				Fail(c, 9999, "请求参数错误")
+				return
+			}
+			if err := svc.Targets.Save(&req); err != nil {
+				Fail(c, 9999, err.Error())
+				return
+			}
+			Success(c, req)
+		})
+		pubGroup.DELETE("/target/remove", func(c *gin.Context) {
+			if err := svc.Targets.Remove(c.Query("type"), c.Query("id")); err != nil {
+				Fail(c, 9999, err.Error())
+				return
+			}
+			Success(c, gin.H{"ok": true})
+		})
+		pubGroup.POST("/target/test", func(c *gin.Context) {
+			var req configloader.PublishTargetConfig
+			if c.ShouldBindJSON(&req) != nil {
+				Fail(c, 9999, "请求参数错误")
+				return
+			}
+			pub, err := publisher.New(&req)
+			if err != nil {
+				Fail(c, 9999, err.Error())
+				return
+			}
+			if err := pub.TestConnection(); err != nil {
+				Fail(c, 9999, err.Error())
+				return
+			}
+			Success(c, gin.H{"ok": true})
 		})
 		pubGroup.GET("/task/status", func(c *gin.Context) {
 			task, ok := svc.Tasks.Get(c.Query("taskId"))
@@ -256,6 +368,43 @@ func Register(r *gin.Engine, svc Services, staticDir string) {
 			}
 			Success(c, record)
 		})
+		pubGroup.GET("/record/files", func(c *gin.Context) {
+			record, err := svc.Records.Detail(c.Query("recordId"))
+			if err != nil {
+				Fail(c, 2001, "发布记录不存在")
+				return
+			}
+			Success(c, record.PublishedFiles)
+		})
+		pubGroup.POST("/record/restore", func(c *gin.Context) {
+			var req struct {
+				RecordID string `json:"record_id"`
+			}
+			if c.ShouldBindJSON(&req) != nil {
+				Fail(c, 9999, "请求参数错误")
+				return
+			}
+			record, err := svc.Records.Detail(req.RecordID)
+			if err != nil {
+				Fail(c, 2001, "发布记录不存在")
+				return
+			}
+			targetCfg, err := svc.Targets.Detail(record.PublishingTargetType, record.PublishingTargetID)
+			if err != nil {
+				Fail(c, 9999, err.Error())
+				return
+			}
+			pub, err := publisher.New(targetCfg)
+			if err != nil {
+				Fail(c, 9999, err.Error())
+				return
+			}
+			if err := pub.RestoreBackup(record); err != nil {
+				Fail(c, 9999, err.Error())
+				return
+			}
+			Success(c, gin.H{"ok": true})
+		})
 	}
 
 	r.GET("/", func(c *gin.Context) {
@@ -306,34 +455,60 @@ func loginHandler(cfg *configloader.SystemConfig) gin.HandlerFunc {
 	}
 }
 
-func startPublish(c *gin.Context, svc Services, mode string, chosen []string) {
-	books := chosen
-	if mode == "full" {
+type publishStartRequest struct {
+	Scope      string   `json:"scope"`
+	Books      []string `json:"books"`
+	Mode       string   `json:"mode"`
+	TargetType string   `json:"target_type"`
+	TargetID   string   `json:"target_id"`
+}
+
+func startPublish(c *gin.Context, svc Services, req publishStartRequest) {
+	scope, books, err := resolvePublishScope(svc, req)
+	if err != nil {
+		Fail(c, 9999, err.Error())
+		return
+	}
+	task := svc.Tasks.Create(scope, books)
+	go runPublishTask(task.ID, svc, req, scope, books)
+	Success(c, gin.H{
+		"task_id":     task.ID,
+		"status":      task.Status,
+		"build_books": books,
+		"scope":       scope,
+	})
+}
+
+func resolvePublishScope(svc Services, req publishStartRequest) (string, []string, error) {
+	scope := strings.TrimSpace(req.Scope)
+	if scope == "" {
+		scope = "full_site"
+	}
+	switch scope {
+	case "full_site":
 		list, err := fsmanager.ListBooks(filepath.Join(svc.SourceDir, "_books_meta.yaml"))
 		if err != nil {
-			Fail(c, 9999, err.Error())
-			return
+			return "", nil, err
 		}
-		books = books[:0]
+		books := make([]string, 0, len(list))
 		for _, item := range list {
 			books = append(books, item.BookDirName)
 		}
+		return scope, normalizePublishBooks(books), nil
+	case "single_book":
+		books := normalizePublishBooks(req.Books)
+		if len(books) != 1 {
+			return "", nil, fmt.Errorf("请选择一个有效的书籍目录后再发布")
+		}
+		return scope, books, nil
+	case "portal_only":
+		return scope, nil, nil
+	default:
+		return "", nil, fmt.Errorf("未知发布范围: %s", scope)
 	}
-	books = normalizePublishBooks(books)
-	if mode == "single" && len(books) != 1 {
-		Fail(c, 9999, "请选择一个有效的书籍目录后再发布")
-		return
-	}
-	if len(books) == 0 {
-		Fail(c, 9999, "当前没有可发布的书籍")
-		return
-	}
-	task := svc.Tasks.Create(mode, books)
-	go runPublishTask(task.ID, svc, mode, books)
-	Success(c, gin.H{"task_id": task.ID, "status": task.Status, "build_books": books})
 }
 
-func runPublishTask(taskID string, svc Services, mode string, books []string) {
+func runPublishTask(taskID string, svc Services, req publishStartRequest, scope string, books []string) {
 	logs := []string{}
 	appendLog := func(line string) {
 		if strings.TrimSpace(line) == "" {
@@ -342,75 +517,184 @@ func runPublishTask(taskID string, svc Services, mode string, books []string) {
 		logs = append(logs, line)
 		svc.Tasks.AppendLog(taskID, line)
 	}
-	if mode == "full" {
+
+	targetCfg, err := resolvePublishTarget(svc, req.TargetType, req.TargetID)
+	if err != nil {
+		failPublishTask(taskID, svc, req, scope, books, "", nil, &logs, appendLog, err)
+		return
+	}
+	pub, err := publisher.New(targetCfg)
+	if err != nil {
+		failPublishTask(taskID, svc, req, scope, books, "", targetCfg, &logs, appendLog, err)
+		return
+	}
+	mode := resolvePublishMode(req.Mode, targetCfg.ModeDefault)
+
+	targetDir := ""
+	targetPath := ""
+	if scope == "full_site" || scope == "portal_only" {
 		appendLog("[INFO] 开始构建门户首页")
 		log, err := svc.Hugo.BuildMainSite(svc.SourceDir)
 		appendLog(log)
 		if err != nil {
-			saveRecord(svc, mode, books, strings.Join(logs, "\n"), "fail", err.Error())
-			svc.Tasks.Finish(taskID, publishtask.StatusFailed, "", err.Error())
+			failPublishTask(taskID, svc, req, scope, books, "", targetCfg, &logs, appendLog, err)
 			return
 		}
 	}
-	for _, book := range books {
-		appendLog(fmt.Sprintf("[INFO] 开始构建书籍 %s", book))
-		log, err := svc.Hugo.BuildBook(svc.SourceDir, book)
-		appendLog(fmt.Sprintf("[BOOK] %s\n%s", book, log))
-		if err != nil {
-			saveRecord(svc, mode, books, strings.Join(logs, "\n"), "fail", err.Error())
-			svc.Tasks.Finish(taskID, publishtask.StatusFailed, "", err.Error())
-			return
+	if scope == "full_site" || scope == "single_book" {
+		for _, book := range books {
+			appendLog(fmt.Sprintf("[INFO] 开始构建书籍 %s", book))
+			log, err := svc.Hugo.BuildBook(svc.SourceDir, book)
+			appendLog(fmt.Sprintf("[BOOK] %s\n%s", book, log))
+			if err != nil {
+				failPublishTask(taskID, svc, req, scope, books, "", targetCfg, &logs, appendLog, err)
+				return
+			}
 		}
 	}
-	targetDir := filepath.Join(svc.System.BuildTempRoot, "book_cache")
-	prefix := ""
-	if mode == "full" {
+	switch scope {
+	case "full_site":
 		if err := svc.Hugo.MergeFullPackage(books); err != nil {
 			appendLog("[ERROR] 合并全站构建产物失败")
-			svc.Tasks.Finish(taskID, publishtask.StatusFailed, "", err.Error())
+			failPublishTask(taskID, svc, req, scope, books, "", targetCfg, &logs, appendLog, err)
 			return
 		}
 		appendLog("[INFO] 已合并门户与书籍构建产物")
 		targetDir = filepath.Join(svc.System.BuildTempRoot, "full_package")
-	} else if len(books) == 1 {
+	case "single_book":
 		targetDir = filepath.Join(svc.System.BuildTempRoot, "book_cache", books[0])
-		prefix = books[0]
+		targetPath = books[0]
+	case "portal_only":
+		targetDir = filepath.Join(svc.System.BuildTempRoot, "main_site_out")
 	}
-	uploadLog, err := svc.Uploader.UploadDir(targetDir, prefix)
-	appendLog(uploadLog)
-	status := "success"
-	errMsg := ""
+
+	result, err := pub.PublishDir(targetDir, publisher.PublishOptions{
+		Mode:       mode,
+		Scope:      scope,
+		TargetPath: targetPath,
+		Logf:       appendLog,
+	})
 	if err != nil {
-		status = "fail"
-		errMsg = err.Error()
-		saveRecord(svc, mode, books, strings.Join(logs, "\n"), status, errMsg)
-		svc.Tasks.Finish(taskID, publishtask.StatusFailed, "", errMsg)
+		failPublishTask(taskID, svc, req, scope, books, targetDir, targetCfg, &logs, appendLog, err)
 		return
 	}
-	record := saveRecord(svc, mode, books, strings.Join(logs, "\n"), status, errMsg)
+	record := saveRecord(svc, req, scope, books, mode, targetDir, targetCfg, strings.Join(logs, "\n"), "success", "", result)
 	appendLog("[INFO] 发布完成")
 	svc.Tasks.Finish(taskID, publishtask.StatusSuccess, record.PublicURL, "")
 }
 
-func saveRecord(svc Services, mode string, books []string, logs string, status string, errMsg string) *configloader.PublishRecord {
-	record := &configloader.PublishRecord{
-		PublishingTime: time.Now().Format("2006-01-02 15:04:05"),
-		PublishingType: mode,
-		BuildBooks:     normalizePublishBooks(books),
-		TempOutputPath: filepath.Join(svc.System.BuildTempRoot, "full_package"),
-		S3Bucket:       svc.System.S3.DefaultBucketName,
-		S3Prefix:       "/",
-		PublicURL:      "https://" + svc.System.S3.SitePublicDomain,
-		FullLog:        logs,
-		Status:         status,
-		ErrorMsg:       errMsg,
+func resolvePublishTarget(svc Services, targetType string, targetID string) (*configloader.PublishTargetConfig, error) {
+	if targetType == "s3" && targetID == "system-default" {
+		return &configloader.PublishTargetConfig{
+			ID:               "system-default",
+			Name:             "系统默认 S3",
+			Type:             "s3",
+			Enabled:          true,
+			ModeDefault:      "incremental",
+			Bucket:           svc.System.S3.DefaultBucketName,
+			Region:           svc.System.S3.Region,
+			Endpoint:         svc.System.S3.Endpoint,
+			AccessKeyID:      svc.System.S3.AccessKeyID,
+			SecretAccessKey:  svc.System.S3.SecretAccessKey,
+			SitePublicDomain: svc.System.S3.SitePublicDomain,
+			BasePrefix:       "/",
+			CacheHTML:        svc.System.S3.CacheHTML,
+			CacheStatic:      svc.System.S3.CacheStatic,
+		}, nil
 	}
-	if mode == "single" && len(books) == 1 {
-		record.PublicURL += "/" + books[0] + "/"
-		record.TempOutputPath = filepath.Join(svc.System.BuildTempRoot, "book_cache", books[0])
+	targetCfg, err := svc.Targets.Detail(targetType, targetID)
+	if err != nil {
+		return nil, err
+	}
+	if !targetCfg.Enabled {
+		return nil, fmt.Errorf("发布目标 %s 已被禁用", targetCfg.Name)
+	}
+	return targetCfg, nil
+}
+
+func saveRecord(
+	svc Services,
+	req publishStartRequest,
+	scope string,
+	books []string,
+	mode string,
+	tempOutputPath string,
+	targetCfg *configloader.PublishTargetConfig,
+	logs string,
+	status string,
+	errMsg string,
+	result *publisher.PublishResult,
+) *configloader.PublishRecord {
+	record := &configloader.PublishRecord{
+		PublishingTime:  time.Now().Format("2006-01-02 15:04:05"),
+		PublishingType:  "publish",
+		PublishingScope: scope,
+		PublishMode:     mode,
+		BuildBooks:      normalizePublishBooks(books),
+		TempOutputPath:  tempOutputPath,
+		FullLog:         logs,
+		Status:          status,
+		ErrorMsg:        errMsg,
+	}
+	if targetCfg != nil {
+		record.PublishingTargetType = targetCfg.Type
+		record.PublishingTargetID = targetCfg.ID
+		record.PublishingTargetName = targetCfg.Name
+		record.TargetConfigSnapshot = map[string]any{
+			"id":          targetCfg.ID,
+			"name":        targetCfg.Name,
+			"type":        targetCfg.Type,
+			"mode":        targetCfg.ModeDefault,
+			"target_dir":  targetCfg.TargetDir,
+			"remote_dir":  targetCfg.RemoteDir,
+			"bucket":      targetCfg.Bucket,
+			"base_prefix": targetCfg.BasePrefix,
+		}
+		record.S3Bucket = targetCfg.Bucket
+		record.S3Prefix = targetCfg.BasePrefix
+	}
+	if result != nil {
+		record.PublicURL = result.PublicURL
+		record.BackupPath = result.BackupPath
+		record.BackupCreatedAt = result.BackupCreatedAt
+		record.PublishedFiles = result.Files
 	}
 	_ = svc.Records.Save(record)
 	return record
+}
+
+func resolvePublishMode(requestMode string, defaultMode string) string {
+	mode := strings.TrimSpace(requestMode)
+	if mode != "" {
+		return mode
+	}
+	mode = strings.TrimSpace(defaultMode)
+	if mode != "" {
+		return mode
+	}
+	return "incremental"
+}
+
+func failPublishTask(
+	taskID string,
+	svc Services,
+	req publishStartRequest,
+	scope string,
+	books []string,
+	tempOutputPath string,
+	targetCfg *configloader.PublishTargetConfig,
+	logs *[]string,
+	appendLog func(string),
+	err error,
+) {
+	appendLog("[ERROR] " + err.Error())
+	defaultMode := ""
+	if targetCfg != nil {
+		defaultMode = targetCfg.ModeDefault
+	}
+	mode := resolvePublishMode(req.Mode, defaultMode)
+	saveRecord(svc, req, scope, books, mode, tempOutputPath, targetCfg, strings.Join(*logs, "\n"), "fail", err.Error(), nil)
+	svc.Tasks.Finish(taskID, publishtask.StatusFailed, "", err.Error())
 }
 
 func normalizePublishBooks(books []string) []string {

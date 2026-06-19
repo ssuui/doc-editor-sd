@@ -13,6 +13,8 @@ import (
 	"doc-publish-server/internal/filelock"
 	"doc-publish-server/internal/fsmanager"
 	"doc-publish-server/internal/hugobuilder"
+	"doc-publish-server/internal/indexmanager"
+	"doc-publish-server/internal/publishtarget"
 	"doc-publish-server/internal/publishtask"
 	"doc-publish-server/internal/recordstore"
 	"doc-publish-server/internal/s3uploader"
@@ -59,6 +61,8 @@ func main() {
 		Uploader:  uploaderSvc,
 		Tasks:     publishtask.New(),
 		Records:   recordstore.New(systemCfg.PublishRecordPath),
+		Indexes:   indexmanager.New(systemCfg.SourceRootPath),
+		Targets:   publishtarget.New(systemCfg.PublishTargetsPath),
 		SourceDir: systemCfg.SourceRootPath,
 	}, staticDir)
 
@@ -70,6 +74,7 @@ func mustEnsureDirs(cfg *configloader.SystemConfig, staticDir string) {
 		cfg.SourceRootPath,
 		cfg.BuildTempRoot,
 		cfg.PublishRecordPath,
+		cfg.PublishTargetsPath,
 		staticDir,
 		filepath.Dir(cfg.HugoBinPath),
 	} {

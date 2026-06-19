@@ -11,17 +11,18 @@ import (
 )
 
 type SystemConfig struct {
-	HTTPPort          int         `yaml:"http_port"`
-	SourceRootPath    string      `yaml:"source_root_path"`
-	HugoBinPath       string      `yaml:"hugo_bin_path"`
-	GlobalThemePath   string      `yaml:"global_theme_path"`
-	BuildTempRoot     string      `yaml:"build_temp_root"`
-	PublishRecordPath string      `yaml:"publish_record_path"`
-	TempCleanInterval int         `yaml:"temp_clean_interval"`
-	BuildTaskTimeout  int         `yaml:"build_task_timeout"`
-	Auth              AuthConfig  `yaml:"auth"`
-	S3                S3Config    `yaml:"s3"`
-	EditorLimit       EditorLimit `yaml:"editor_limit"`
+	HTTPPort           int         `yaml:"http_port"`
+	SourceRootPath     string      `yaml:"source_root_path"`
+	HugoBinPath        string      `yaml:"hugo_bin_path"`
+	GlobalThemePath    string      `yaml:"global_theme_path"`
+	BuildTempRoot      string      `yaml:"build_temp_root"`
+	PublishRecordPath  string      `yaml:"publish_record_path"`
+	PublishTargetsPath string      `yaml:"publish_targets_path"`
+	TempCleanInterval  int         `yaml:"temp_clean_interval"`
+	BuildTaskTimeout   int         `yaml:"build_task_timeout"`
+	Auth               AuthConfig  `yaml:"auth"`
+	S3                 S3Config    `yaml:"s3"`
+	EditorLimit        EditorLimit `yaml:"editor_limit"`
 }
 
 type AuthConfig struct {
@@ -129,29 +130,75 @@ type BookNavLink struct {
 }
 
 type PublishRecord struct {
-	RecordID       string   `yaml:"record_id"`
-	PublishingTime string   `yaml:"publishing_time"`
-	PublishingType string   `yaml:"publishing_type"`
-	BuildBooks     []string `yaml:"build_books"`
-	TempOutputPath string   `yaml:"temp_output_path"`
-	S3Bucket       string   `yaml:"s3_bucket"`
-	S3Prefix       string   `yaml:"s3_prefix"`
-	PublicURL      string   `yaml:"public_url"`
-	FullLog        string   `yaml:"full_log"`
-	Status         string   `yaml:"status"`
-	ErrorMsg       string   `yaml:"error_msg"`
+	RecordID             string                `yaml:"record_id" json:"record_id"`
+	PublishingTime       string                `yaml:"publishing_time" json:"publishing_time"`
+	PublishingType       string                `yaml:"publishing_type" json:"publishing_type"`
+	PublishingScope      string                `yaml:"publishing_scope" json:"publishing_scope"`
+	PublishMode          string                `yaml:"publish_mode" json:"publish_mode"`
+	PublishingTargetType string                `yaml:"publishing_target_type" json:"publishing_target_type"`
+	PublishingTargetID   string                `yaml:"publishing_target_id" json:"publishing_target_id"`
+	PublishingTargetName string                `yaml:"publishing_target_name" json:"publishing_target_name"`
+	BuildBooks           []string              `yaml:"build_books" json:"build_books"`
+	TempOutputPath       string                `yaml:"temp_output_path" json:"temp_output_path"`
+	S3Bucket             string                `yaml:"s3_bucket" json:"s3_bucket"`
+	S3Prefix             string                `yaml:"s3_prefix" json:"s3_prefix"`
+	PublicURL            string                `yaml:"public_url" json:"public_url"`
+	FullLog              string                `yaml:"full_log" json:"full_log"`
+	Status               string                `yaml:"status" json:"status"`
+	ErrorMsg             string                `yaml:"error_msg" json:"error_msg"`
+	BackupPath           string                `yaml:"backup_path" json:"backup_path"`
+	BackupCreatedAt      string                `yaml:"backup_created_at" json:"backup_created_at"`
+	TargetConfigSnapshot map[string]any        `yaml:"target_config_snapshot,omitempty" json:"target_config_snapshot,omitempty"`
+	PublishedFiles       []PublishedFileRecord `yaml:"published_files,omitempty" json:"published_files,omitempty"`
+}
+
+type PublishedFileRecord struct {
+	SourceRelPath string `yaml:"source_rel_path" json:"source_rel_path"`
+	TargetPath    string `yaml:"target_path" json:"target_path"`
+	TargetKey     string `yaml:"target_key,omitempty" json:"target_key,omitempty"`
+	FileSize      int64  `yaml:"file_size" json:"file_size"`
+	Checksum      string `yaml:"checksum,omitempty" json:"checksum,omitempty"`
+}
+
+type PublishTargetConfig struct {
+	ID               string `yaml:"id" json:"id"`
+	Name             string `yaml:"name" json:"name"`
+	Type             string `yaml:"type" json:"type"`
+	Enabled          bool   `yaml:"enabled" json:"enabled"`
+	CreatedAt        string `yaml:"created_at,omitempty" json:"created_at,omitempty"`
+	UpdatedAt        string `yaml:"updated_at,omitempty" json:"updated_at,omitempty"`
+	ModeDefault      string `yaml:"mode_default,omitempty" json:"mode_default,omitempty"`
+	Bucket           string `yaml:"bucket,omitempty" json:"bucket,omitempty"`
+	Region           string `yaml:"region,omitempty" json:"region,omitempty"`
+	Endpoint         string `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+	AccessKeyID      string `yaml:"access_key_id,omitempty" json:"access_key_id,omitempty"`
+	SecretAccessKey  string `yaml:"secret_access_key,omitempty" json:"secret_access_key,omitempty"`
+	SitePublicDomain string `yaml:"site_public_domain,omitempty" json:"site_public_domain,omitempty"`
+	BasePrefix       string `yaml:"base_prefix,omitempty" json:"base_prefix,omitempty"`
+	CacheHTML        string `yaml:"cache_html,omitempty" json:"cache_html,omitempty"`
+	CacheStatic      string `yaml:"cache_static,omitempty" json:"cache_static,omitempty"`
+	TargetDir        string `yaml:"target_dir,omitempty" json:"target_dir,omitempty"`
+	BakDir           string `yaml:"bak_dir,omitempty" json:"bak_dir,omitempty"`
+	Host             string `yaml:"host,omitempty" json:"host,omitempty"`
+	Port             int    `yaml:"port,omitempty" json:"port,omitempty"`
+	Username         string `yaml:"username,omitempty" json:"username,omitempty"`
+	Password         string `yaml:"password,omitempty" json:"password,omitempty"`
+	PrivateKeyPath   string `yaml:"private_key_path,omitempty" json:"private_key_path,omitempty"`
+	RemoteDir        string `yaml:"remote_dir,omitempty" json:"remote_dir,omitempty"`
+	RemoteBakDir     string `yaml:"remote_bak_dir,omitempty" json:"remote_bak_dir,omitempty"`
 }
 
 func DefaultSystemConfig() *SystemConfig {
 	return &SystemConfig{
-		HTTPPort:          8080,
-		SourceRootPath:    "./source_root",
-		HugoBinPath:       "./bin/hugo-extended",
-		GlobalThemePath:   "./global_theme",
-		BuildTempRoot:     "./build_temp",
-		PublishRecordPath: "./publish_records",
-		TempCleanInterval: 24,
-		BuildTaskTimeout:  300,
+		HTTPPort:           8080,
+		SourceRootPath:     "./source_root",
+		HugoBinPath:        "./bin/hugo-extended",
+		GlobalThemePath:    "./global_theme",
+		BuildTempRoot:      "./build_temp",
+		PublishRecordPath:  "./publish_records",
+		PublishTargetsPath: "./config/publish_targets",
+		TempCleanInterval:  24,
+		BuildTaskTimeout:   300,
 		Auth: AuthConfig{
 			AdminUsername:    "admin",
 			AdminPassword:    "AtlasDocs_2026!",
@@ -296,7 +343,7 @@ func validateSystemConfig(cfg *SystemConfig) error {
 	if cfg.S3.ImgCDNDomain == "" || cfg.S3.ImgStorePrefix == "" || cfg.S3.PresignPutExpireMin <= 0 {
 		return errors.New("s3.img_cdn_domain/img_store_prefix/presign_put_expire_min 不能为空")
 	}
-	if cfg.SourceRootPath == "" || cfg.HugoBinPath == "" || cfg.BuildTempRoot == "" || cfg.PublishRecordPath == "" {
+	if cfg.SourceRootPath == "" || cfg.HugoBinPath == "" || cfg.BuildTempRoot == "" || cfg.PublishRecordPath == "" || cfg.PublishTargetsPath == "" {
 		return fmt.Errorf("基础路径配置不能为空")
 	}
 	return nil
